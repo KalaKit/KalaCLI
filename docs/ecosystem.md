@@ -86,6 +86,12 @@ It is recommended to use [KalaWindow](https://github.com/kalakit/kalawindow) to 
 
 ---
 
+## KalaPhysics
+
+**KalaPhysics** aims to cover most physics needs for ray casting, collision with most popular shapes in broadphase and narrowphase and will experiment with many various other things like **instant vs delayed rays**.
+
+---
+
 ## Solin
 
 Self-made IDE, uses several headers from KalaHeaders and runs off of KalaWindow.
