@@ -1,4 +1,4 @@
-//Copyright(C) 2025 Lost Empire Entertainment
+//Copyright(C) 2026 Lost Empire Entertainment
 //This program comes with ABSOLUTELY NO WARRANTY.
 //This is free software, and you are welcome to redistribute it under certain conditions.
 //Read LICENSE.md for more information.
@@ -44,7 +44,7 @@ namespace KalaCLI
 	class LIB_API CommandManager
 	{
 	public:
-		static inline vector<Command> commands{};
+		static vector<Command>& GetCommands();
 
 		//Parse given strings from end user
 		static bool ParseCommand(const vector<string>& params);

@@ -1,4 +1,4 @@
-//Copyright(C) 2025 Lost Empire Entertainment
+//Copyright(C) 2026 Lost Empire Entertainment
 //This program comes with ABSOLUTELY NO WARRANTY.
 //This is free software, and you are welcome to redistribute it under certain conditions.
 //Read LICENSE.md for more information.
@@ -20,6 +20,10 @@ using std::ostringstream;
 
 namespace KalaCLI
 {
+	static vector<Command> commands{};
+
+	vector<Command>& CommandManager::GetCommands() { return commands; }
+
 	bool CommandManager::ParseCommand(const vector<string>& params)
 	{
 		if (params.empty()) return false;

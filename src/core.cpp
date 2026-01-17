@@ -1,4 +1,4 @@
-//Copyright(C) 2025 Lost Empire Entertainment
+//Copyright(C) 2026 Lost Empire Entertainment
 //This program comes with ABSOLUTELY NO WARRANTY.
 //This is free software, and you are welcome to redistribute it under certain conditions.
 //Read LICENSE.md for more information.
@@ -57,6 +57,10 @@ static void Command_Exit(const vector<string>& params);
 
 namespace KalaCLI
 {
+	static string currentDir{};
+
+	string& Core::GetCurrentDir() { return currentDir; }
+
 	void Core::Run(
 		int argc,
 		char* argv[],
@@ -204,7 +208,7 @@ void Command_Help(const vector<string>& params)
 		<< "Use the ampersand (&) symbol to stack commands, for example '--list & --qe' to list and quick exit.\n\n"
 		<< "Listing all commands:\n"
 		<< "  run, r\n";
-	for (const auto& c : CommandManager::commands)
+	for (const auto& c : CommandManager::GetCommands())
 	{
 		for (const auto& p : c.primary)
 		{
@@ -241,7 +245,7 @@ void Command_Info(const vector<string>& params)
 
 	Command cmd{};
 
-	for (const auto& c : CommandManager::commands)
+	for (const auto& c : CommandManager::GetCommands())
 	{
 		if (find(c.primary.begin(), c.primary.end(), command) != c.primary.end())
 		{
@@ -282,17 +286,21 @@ void Command_Info(const vector<string>& params)
 
 void Command_Where(const vector<string>& params)
 {
-	if (Core::currentDir.empty()) Core::currentDir = current_path().string();
-	Log::Print("\nCurrently at: " + Core::currentDir);
+	string& currentDir = Core::GetCurrentDir();
+
+	if (currentDir.empty()) currentDir = current_path().string();
+	Log::Print("\nCurrently at: " + currentDir);
 }
 
 void Command_List(const vector<string>& params)
 {
-	if (Core::currentDir.empty()) Core::currentDir = current_path().string();
+	string& currentDir = Core::GetCurrentDir();
+
+	if (currentDir.empty()) currentDir = current_path().string();
 
 	vector<path> content{};
 
-	string result = ListDirectoryContents(Core::currentDir, content);
+	string result = ListDirectoryContents(currentDir, content);
 
 	if (!result.empty())
 	{
@@ -307,7 +315,7 @@ void Command_List(const vector<string>& params)
 
 	ostringstream oss{};
 
-	oss << "\nListing all paths at '" << Core::currentDir << "':\n";
+	oss << "\nListing all paths at '" << currentDir << "':\n";
 	if (content.empty()) oss << "  - (empty)";
 	else
 	{
@@ -315,7 +323,7 @@ void Command_List(const vector<string>& params)
 		{
 			oss << "  - ";
 
-			path rel = content[i].lexically_relative(Core::currentDir);
+			path rel = content[i].lexically_relative(currentDir);
 			oss << rel.string();
 
 			if (is_directory(content[i])) oss << "/";
@@ -329,8 +337,10 @@ void Command_List(const vector<string>& params)
 
 void Command_Go(const vector<string>& params)
 {
-	if (Core::currentDir.empty()) Core::currentDir = current_path().string();
-	path correctTarget = weakly_canonical(path(Core::currentDir) / params[1]);
+	string& currentDir = Core::GetCurrentDir();
+
+	if (currentDir.empty()) currentDir = current_path().string();
+	path correctTarget = weakly_canonical(path(currentDir) / params[1]);
 
 	if (!exists(correctTarget))
 	{
@@ -362,9 +372,9 @@ void Command_Go(const vector<string>& params)
 		return;
 	}
 
-	Core::currentDir = correctTarget.string();
+	currentDir = correctTarget.string();
 
-	Log::Print("\nMoved to new path: " + Core::currentDir);
+	Log::Print("\nMoved to new path: " + currentDir);
 }
 
 void Command_Clear(const vector<string>& params) { system("cls"); }
