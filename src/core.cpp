@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <csignal>
 
 #include "KalaHeaders/log_utils.hpp"
 #include "KalaHeaders/string_utils.hpp"
@@ -17,6 +18,8 @@
 
 using KalaHeaders::KalaLog::Log;
 using KalaHeaders::KalaLog::LogType;
+using KalaHeaders::KalaLog::TimeFormat;
+using KalaHeaders::KalaLog::DateFormat;
 using KalaHeaders::KalaString::ContainsString;
 using KalaHeaders::KalaString::SplitString;
 using KalaHeaders::KalaString::TrimString;
@@ -35,6 +38,7 @@ using std::to_string;
 using std::vector;
 using std::filesystem::current_path;
 using std::filesystem::path;
+using std::raise;
 
 static void AddBuiltInCommands();
 
@@ -123,6 +127,32 @@ namespace KalaCLI
 				CommandManager::ParseCommand(splitValue);
 			}
 		}
+	}
+
+	void Core::ForceClose(
+		const string& target,
+		const string& reason)
+	{
+		Log::Print(
+			"\n================"
+			"\nFORCE CLOSE"
+			"\n================\n",
+			true);
+
+		Log::Print(
+			reason,
+			target,
+			LogType::LOG_ERROR,
+			2,
+			true,
+			TimeFormat::TIME_NONE,
+			DateFormat::DATE_NONE);
+
+#ifdef _WIN32
+		__debugbreak();
+#else
+		raise(SIGTRAP);
+#endif
 	}
 }
 

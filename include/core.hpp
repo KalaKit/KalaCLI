@@ -24,5 +24,11 @@ namespace KalaCLI
 			int argc,
 			char* argv[],
 			function<void()> AddExternalCommands);
+
+		//Use this when you absolutely need a hard crash at this very moment.
+		//Aborts and doesn't clean up data.
+		[[noreturn]] static void ForceClose(
+			const string& title,
+			const string& reason);
 	};
 }
