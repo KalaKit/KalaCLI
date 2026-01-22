@@ -44,8 +44,7 @@ namespace KalaCLI
 
 		if (!COMMAND_PREFIX.empty()) cleanedParams[0] = RemoveAllFromString(cleanedParams[0], COMMAND_PREFIX.data());
 		
-		if (cleanedParams[0] == "run"
-			|| cleanedParams[0] == "r")
+		if (cleanedParams[0] == "r")
 		{
 			if (cleanedParams.size() == 1)
 			{

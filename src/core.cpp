@@ -25,6 +25,11 @@ using KalaHeaders::KalaString::SplitString;
 using KalaHeaders::KalaString::TrimString;
 using KalaHeaders::KalaString::TokenizeString;
 using KalaHeaders::KalaFile::ListDirectoryContents;
+using KalaHeaders::KalaFile::CreateDirectory;
+using KalaHeaders::KalaFile::DeletePath;
+using KalaHeaders::KalaFile::RenamePath;
+using KalaHeaders::KalaFile::MovePath;
+using KalaHeaders::KalaFile::CopyPath;
 
 using KalaCLI::Core;
 using KalaCLI::Command;
@@ -38,7 +43,10 @@ using std::to_string;
 using std::vector;
 using std::filesystem::current_path;
 using std::filesystem::path;
+using std::filesystem::weakly_canonical;
+using std::filesystem::filesystem_error;
 using std::raise;
+using std::abort;
 
 static void AddBuiltInCommands();
 
@@ -51,13 +59,57 @@ static void Command_Info(const vector<string>& params);
 static void Command_Where(const vector<string>& params);
 //Built-in command for listing all files and folders in current dir
 static void Command_List(const vector<string>& params);
-//Built-in command for going to desired path
+//Built-in command for going to target path
 static void Command_Go(const vector<string>& params);
+
+//Built-in command for creating a directory at the target path
+static void Command_CreateDir(const vector<string>& params);
+//Built-in command for renaming the file or directory at the target path
+static void Command_Rename(const vector<string>& params);
+//Built-in command for deleting the file or directory at the target path
+static void Command_Delete(const vector<string>& params);
+//Built-in command for moving the file or directory from the origin to the target path,
+//the file or directory at the target path is overridden if it already exists
+static void Command_Move(const vector<string>& params);
+//Built-in command for copying the file or directory from the origin to the target path,
+//the copy action bails if a file or directory already exists at the target path
+static void Command_Copy(const vector<string>& params);
+//Built-in command for copying the file or directory from the origin to the target path,
+//the file or directory at the target path is overridden if it already exists
+static void Command_ForceCopy(const vector<string>& params);
 
 //Built-in command for cleaning console commands
 static void Command_Clear(const vector<string>& params);
 //Built-in command for closing the cli
 static void Command_Exit(const vector<string>& params);
+
+static path TryTargetPath(
+	const string& target, 
+	const string& action,
+	bool isFull = false)
+{
+	path invalidTarget{};
+
+	string targetType = isFull ? "full" : "partial";
+	path finalTarget = isFull ? target : path(Core::GetCurrentDir()) / target;
+
+	try
+	{
+		finalTarget = weakly_canonical(finalTarget);
+	}
+	catch (const filesystem_error&)
+	{
+		Log::Print(
+			"Failed to " + action + " target via " + targetType + " path '" + finalTarget.string() + "' because it could not be resolved!",
+			"COMMAND",
+			LogType::LOG_ERROR,
+			2);
+
+		return invalidTarget;
+	}
+
+	return finalTarget;
+}
 
 namespace KalaCLI
 {
@@ -153,6 +205,8 @@ namespace KalaCLI
 #else
 		raise(SIGTRAP);
 #endif
+
+		abort();
 	}
 }
 
@@ -160,14 +214,14 @@ void AddBuiltInCommands()
 {
 	Command cmd_help
 	{
-		.primary = { "help" },
+		.primary = { "h" },
 		.description = "Lists all available commands.",
 		.paramCount = 1,
 		.targetFunction = Command_Help
 	};
 	Command cmd_info
 	{
-		.primary = { "info" },
+		.primary = { "i" },
 		.description = "Lists info about chosen command.",
 		.paramCount = 2,
 		.targetFunction = Command_Info
@@ -175,43 +229,95 @@ void AddBuiltInCommands()
 
 	Command cmd_where
 	{
-		.primary = { "where" },
+		.primary = { "w" },
 		.description = "Displays current path.",
 		.paramCount = 1,
 		.targetFunction = Command_Where
 	};
 	Command cmd_list
 	{
-		.primary = { "list" },
+		.primary = { "l" },
 		.description = "Lists all files and folders in current directory.",
 		.paramCount = 1,
 		.targetFunction = Command_List
 	};
 	Command cmd_go
 	{
-		.primary = { "go" },
+		.primary = { "g" },
 		.description = "Goes to chosen directory.",
 		.paramCount = 2,
 		.targetFunction = Command_Go
 	};
 
+	Command cmd_createdir
+	{
+		.primary = { "cd" },
+		.description = "Creates a new directory at the chosen path.",
+		.paramCount = 2,
+		.targetFunction = Command_CreateDir
+	};
+	Command cmd_delete
+	{
+		.primary = { "dl" },
+		.description = "Deletes file or directory at the chosen path.",
+		.paramCount = 2,
+		.targetFunction = Command_Delete
+	};
+	Command cmd_rename
+	{
+		.primary = { "rn" },
+		.description = 
+			"Renames target file or directory to new value. "
+			"Second path must be path to existing file, "
+			"third parameter must be its new name only.",
+		.paramCount = 3,
+		.targetFunction = Command_Rename
+	};
+	Command cmd_move
+	{
+		.primary = { "mv" },
+		.description = 
+			"Moves target file or directory to new path, "
+			"overwrites file or directory at target path if it already exists.",
+		.paramCount = 3,
+		.targetFunction = Command_Move
+	};
+	Command cmd_copy
+	{
+		.primary = { "cp" },
+		.description =
+			"Copies target file or directory to new chosen path, "
+			"skips copy if new path already exists.",
+		.paramCount = 3,
+		.targetFunction = Command_Copy
+	};
+	Command cmd_forcecopy
+	{
+		.primary = { "fc" },
+		.description = 
+			"Copies target file or directory to new chosen path, "
+			"overwrites file or directory at target path if it already exists.",
+		.paramCount = 3,
+		.targetFunction = Command_ForceCopy
+	};
+
 	Command cmd_clear
 	{
-		.primary = { "clear", "c" },
+		.primary = { "c" },
 		.description = "Clears the console from all messages.",
 		.paramCount = 1,
 		.targetFunction = Command_Clear
 	};
 	Command cmd_exit
 	{
-		.primary = { "exit", "e" },
+		.primary = { "e" },
 		.description = "Asks for user to press enter to close the cli, good for reading messages before quitting.",
 		.paramCount = 1,
 		.targetFunction = Command_Exit
 	};
 	Command cmd_qe
 	{
-		.primary = { "quickexit", "qe" },
+		.primary = { "q" },
 		.description = "Quickly exits this cli without any 'Press Enter to quit' confirmation.",
 		.paramCount = 1,
 		.targetFunction = Command_Exit
@@ -224,6 +330,13 @@ void AddBuiltInCommands()
 	CommandManager::AddCommand(cmd_list);
 	CommandManager::AddCommand(cmd_go);
 
+	CommandManager::AddCommand(cmd_createdir);
+	CommandManager::AddCommand(cmd_delete);
+	CommandManager::AddCommand(cmd_rename);
+	CommandManager::AddCommand(cmd_move);
+	CommandManager::AddCommand(cmd_copy);
+	CommandManager::AddCommand(cmd_forcecopy);
+
 	CommandManager::AddCommand(cmd_clear);
 	CommandManager::AddCommand(cmd_exit);
 	CommandManager::AddCommand(cmd_qe);
@@ -233,11 +346,11 @@ void Command_Help(const vector<string>& params)
 {
 	ostringstream result{};
 
-	result << "\nType 'info' with a command name as the"
+	result << "\nType '--i' with a command name as the"
 		<< " second parameter to get more info about that command.\n"
-		<< "Use the ampersand (&) symbol to stack commands, for example '--list & --qe' to list and quick exit.\n\n"
+		<< "Use the ampersand (&) symbol to stack commands, for example '--l & --q' to list and quick exit.\n\n"
 		<< "Listing all commands:\n"
-		<< "  run, r\n";
+		<< "  r\n";
 	for (const auto& c : CommandManager::GetCommands())
 	{
 		for (const auto& p : c.primary)
@@ -263,8 +376,7 @@ void Command_Info(const vector<string>& params)
 
 	result << "\n";
 	
-	if (command == "run"
-		|| command == "r")
+	if (command == "r")
 	{
 		result << "Runs selected user command with any amount of parameters.";
 		
@@ -407,13 +519,361 @@ void Command_Go(const vector<string>& params)
 	Log::Print("\nMoved to new path: " + currentDir);
 }
 
+void Command_CreateDir(const vector<string>& params)
+{
+	path partialPath = TryTargetPath(
+		params[1],
+		"create directory at");
+
+	if (partialPath.empty()) return;
+
+	auto createdir = [](path target)
+		{
+			string result = CreateDirectory(target);
+
+			if (!result.empty())
+			{
+				Log::Print(
+					result, 
+					"COMMAND",
+					LogType::LOG_ERROR,
+					2);
+			}
+		};
+
+	if (!exists(partialPath))
+	{
+		createdir(partialPath);
+
+		return;
+	}
+
+	string& currentDir = Core::GetCurrentDir();
+	if (currentDir.empty()) currentDir = current_path().string();
+
+	path fullPath = TryTargetPath(
+		params[1],
+		"create directory at",
+		true);
+
+	if (fullPath.empty()) return;
+
+	if (!exists(fullPath))
+	{
+		createdir(fullPath);
+
+		return;
+	}
+
+	Log::Print(
+		"Cannot create a new directory at target path '" + fullPath.string() + "' because it already exists!",
+		"COMMAND",
+		LogType::LOG_ERROR,
+		2);
+}
+
+void Command_Delete(const vector<string>& params)
+{
+	path partialPath = TryTargetPath(
+		params[1],
+		"delete");
+
+	if (partialPath.empty()) return;
+
+	auto deletepath = [](path target)
+		{
+			string result = DeletePath(target);
+
+			if (!result.empty())
+			{
+				Log::Print(
+					result,
+					"COMMAND",
+					LogType::LOG_ERROR,
+					2);
+			}
+		};
+
+	if (exists(partialPath))
+	{
+		deletepath(partialPath);
+
+		return;
+	}
+
+	string& currentDir = Core::GetCurrentDir();
+	if (currentDir.empty()) currentDir = current_path().string();
+
+	path fullPath = TryTargetPath(
+		params[1],
+		"delete",
+		true);
+
+	if (fullPath.empty()) return;
+
+	if (exists(fullPath))
+	{
+		deletepath(fullPath);
+
+		return;
+	}
+
+	Log::Print(
+		"Cannot delete target path '" + fullPath.string() + "' because it does not exist!",
+		"COMMAND",
+		LogType::LOG_ERROR,
+		2);
+}
+
+void Command_Rename(const vector<string>& params)
+{
+	path partialPath = TryTargetPath(
+		params[1],
+		"rename");
+
+	if (partialPath.empty()) return;
+
+	string newName = params[2];
+
+	auto renamepath = [](path target, string newName)
+		{
+			string result = RenamePath(target, newName);
+
+			if (!result.empty())
+			{
+				Log::Print(
+					result,
+					"COMMAND",
+					LogType::LOG_ERROR,
+					2);
+			}
+		};
+
+	if (exists(partialPath))
+	{
+		renamepath(partialPath, newName);
+
+		return;
+	}
+
+	string& currentDir = Core::GetCurrentDir();
+	if (currentDir.empty()) currentDir = current_path().string();
+	
+	path fullPath = TryTargetPath(
+		params[1],
+		"rename",
+		true);
+
+	if (fullPath.empty()) return;
+
+	if (exists(fullPath))
+	{
+		renamepath(fullPath, newName);
+
+		return;
+	}
+
+	Log::Print(
+		"Cannot rename target path '" + fullPath.string() + "' because it does not exist!",
+		"COMMAND",
+		LogType::LOG_ERROR,
+		2);
+}
+
+void Command_Move(const vector<string>& params)
+{
+	string& currentDir = Core::GetCurrentDir();
+	if (currentDir.empty()) currentDir = current_path().string();
+
+	path partialOrigin = TryTargetPath(
+		params[1],
+		"move");
+	if (partialOrigin.empty()) return;
+
+	path partialTarget = TryTargetPath(
+		params[2],
+		"move");
+	if (partialTarget.empty()) return;
+	
+	path fullOrigin = TryTargetPath(
+		params[1],
+		"move",
+		true);
+	if (fullOrigin.empty()) return;
+
+	path fullTarget = TryTargetPath(
+		params[2],
+		"move",
+		true);
+	if (fullTarget.empty()) return;
+
+	auto movepath = [](path origin, path target)
+		{
+			string result = MovePath(origin, target);
+
+			if (!result.empty())
+			{
+				Log::Print(
+					result,
+					"COMMAND",
+					LogType::LOG_ERROR,
+					2);
+			}
+		};
+
+	path correctOrigin = exists(partialOrigin) ? partialOrigin : fullOrigin;
+	if (!exists(correctOrigin))
+	{
+		Log::Print(
+			"Cannot move origin path '" + correctOrigin.string() + "' because it does not exist!",
+			"COMMAND",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+
+	//use move target as full target if path contains full disk name like 'C:'
+	path correctTarget = fullTarget.has_root_name() ? fullTarget : partialTarget;
+
+	movepath(correctOrigin, correctTarget);
+}
+
+void Command_Copy(const vector<string>& params)
+{
+	string& currentDir = Core::GetCurrentDir();
+	if (currentDir.empty()) currentDir = current_path().string();
+
+	path partialOrigin = TryTargetPath(
+		params[1],
+		"copy");
+	if (partialOrigin.empty()) return;
+
+	path partialTarget = TryTargetPath(
+		params[2],
+		"copy");
+	if (partialTarget.empty()) return;
+
+	path fullOrigin = TryTargetPath(
+		params[1],
+		"copy",
+		true);
+	if (fullOrigin.empty()) return;
+
+	path fullTarget = TryTargetPath(
+		params[2],
+		"copy",
+		true);
+	if (fullTarget.empty()) return;
+
+	auto copypath = [](path origin, path target)
+		{
+			string result = CopyPath(origin, target);
+
+			if (!result.empty())
+			{
+				Log::Print(
+					result,
+					"COMMAND",
+					LogType::LOG_ERROR,
+					2);
+			}
+		};
+
+	path correctOrigin = exists(partialOrigin) ? partialOrigin : fullOrigin;
+	if (!exists(correctOrigin))
+	{
+		Log::Print(
+			"Cannot copy origin path '" + correctOrigin.string() + "' because it does not exist!",
+			"COMMAND",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+
+	//use copy target as full target if path contains full disk name like 'C:'
+	path correctTarget = fullTarget.has_root_name() ? fullTarget : partialTarget;
+
+	if (exists(correctTarget))
+	{
+		Log::Print(
+			"Cannot copy origin path '" + fullOrigin.string() + "' to target path '" + correctTarget.string()  + "' because the target already exists!",
+			"COMMAND",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+
+	copypath(correctOrigin, correctTarget);
+}
+
+void Command_ForceCopy(const vector<string>& params)
+{
+	string& currentDir = Core::GetCurrentDir();
+	if (currentDir.empty()) currentDir = current_path().string();
+
+	path partialOrigin = TryTargetPath(
+		params[1],
+		"force copy");
+	if (partialOrigin.empty()) return;
+
+	path partialTarget = TryTargetPath(
+		params[2],
+		"force copy");
+	if (partialTarget.empty()) return;
+
+	path fullOrigin = TryTargetPath(
+		params[1],
+		"force copy",
+		true);
+	if (fullOrigin.empty()) return;
+
+	path fullTarget = TryTargetPath(
+		params[2],
+		"force copy",
+		true);
+	if (fullTarget.empty()) return;
+
+	auto copypath = [](path origin, path target)
+		{
+			string result = CopyPath(origin, target, true);
+
+			if (!result.empty())
+			{
+				Log::Print(
+					result,
+					"COMMAND",
+					LogType::LOG_ERROR,
+					2);
+			}
+		};
+
+	path correctOrigin = exists(partialOrigin) ? partialOrigin : fullOrigin;
+	if (!exists(correctOrigin))
+	{
+		Log::Print(
+			"Cannot force copy origin path '" + correctOrigin.string() + "' because it does not exist!",
+			"COMMAND",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+
+	//use force copy target as full target if path contains full disk name like 'C:'
+	path correctTarget = fullTarget.has_root_name() ? fullTarget : partialTarget;
+
+	copypath(correctOrigin, correctTarget);
+}
+
 void Command_Clear(const vector<string>& params) { system("cls"); }
 
 void Command_Exit(const vector<string>& params)
 {
 	if (params.size() == 1
-		&& (params[0] == "exit"
-			|| params[0] == "e"))
+		&& params[0] == "e")
 	{
 		ostringstream out{};
 		out << "\n==========================================================================================\n";
