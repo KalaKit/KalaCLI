@@ -13,7 +13,7 @@
 using KalaHeaders::KalaLog::Log;
 using KalaHeaders::KalaLog::LogType;
 using KalaHeaders::KalaString::ContainsString;
-using KalaHeaders::KalaString::RemoveAllFromString;
+using KalaHeaders::KalaString::RemoveFromString;
 
 using std::system;
 using std::ostringstream;
@@ -42,7 +42,7 @@ namespace KalaCLI
 
 		vector<string> cleanedParams = params;
 
-		if (!COMMAND_PREFIX.empty()) cleanedParams[0] = RemoveAllFromString(cleanedParams[0], COMMAND_PREFIX.data());
+		if (!COMMAND_PREFIX.empty()) cleanedParams[0] = RemoveFromString(cleanedParams[0], COMMAND_PREFIX.data());
 		
 		if (cleanedParams[0] == "r")
 		{

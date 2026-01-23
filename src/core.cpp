@@ -25,7 +25,7 @@ using KalaHeaders::KalaString::SplitString;
 using KalaHeaders::KalaString::TrimString;
 using KalaHeaders::KalaString::TokenizeString;
 using KalaHeaders::KalaFile::ListDirectoryContents;
-using KalaHeaders::KalaFile::CreateDirectory;
+using KalaHeaders::KalaFile::CreateNewDirectory;
 using KalaHeaders::KalaFile::DeletePath;
 using KalaHeaders::KalaFile::RenamePath;
 using KalaHeaders::KalaFile::MovePath;
@@ -529,7 +529,7 @@ void Command_CreateDir(const vector<string>& params)
 
 	auto createdir = [](path target)
 		{
-			string result = CreateDirectory(target);
+			string result = CreateNewDirectory(target);
 
 			if (!result.empty())
 			{
