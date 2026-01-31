@@ -91,7 +91,9 @@ static path TryTargetPath(
 	path invalidTarget{};
 
 	string targetType = isFull ? "full" : "partial";
-	path finalTarget = isFull ? target : path(Core::GetCurrentDir()) / target;
+	path finalTarget = isFull
+		? path(target)
+		: path(Core::GetCurrentDir()) / target;
 
 	try
 	{
@@ -868,7 +870,14 @@ void Command_ForceCopy(const vector<string>& params)
 	copypath(correctOrigin, correctTarget);
 }
 
-void Command_Clear(const vector<string>& params) { system("cls"); }
+void Command_Clear(const vector<string>& params)
+{
+#ifdef _WIN32
+	system("cls");
+#else
+	system("clear");
+#endif
+}
 
 void Command_Exit(const vector<string>& params)
 {

@@ -5,9 +5,6 @@ set(PROGRAM_VERSION_NUMBER 1.0.0.0)
 
 project("KalaCLI" VERSION ${PROGRAM_VERSION_NUMBER} LANGUAGES C CXX)
 
-# Adds a '_' prefix in front of the created binary files if set to TRUE
-set(KALA_PRERELEASE TRUE)
-
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -20,8 +17,10 @@ endif()
 # Platform Detection
 if (WIN32)
     message(STATUS "[KALACLI] Platform = Windows")
+elseif(UNIX)
+	message(STATUS "[KALACLI] Platform = Unix")
 else()
-    message(FATAL_ERROR "[KALACLI] Unsupported platform. Only Windows is supported.")
+    message(FATAL_ERROR "[KALACLI] Unsupported platform. Only Windows and Unix are supported.")
 endif()
 
 # Build Type Detection
@@ -46,9 +45,11 @@ file(GLOB_RECURSE SOURCE_FILES CONFIGURE_DEPENDS
 # SHARED LIBRARY (.dll)
 add_library(KalaCLI SHARED ${SOURCE_FILES})
 
-# Enable exception handling for MSVC
-if (MSVC)
-    target_compile_options(KalaCLI PRIVATE /EHsc)
+if (WIN32)
+	# Enable exception handling for MSVC
+	if (MSVC)
+		target_compile_options(KalaMove PRIVATE /EHsc)
+	endif()
 endif()
 	
 # Get suffix
@@ -74,14 +75,16 @@ target_include_directories(KalaCLI PRIVATE
 	"${EXT_SHARED_DIR}"
 )
 
-# Preprocessor Defines
-target_compile_definitions(KalaCLI PRIVATE 
-	LIB_EXPORT          # dll import/export
-	WIN32_LEAN_AND_MEAN # cleaner windows.h
-	NOMINMAX            # skips min/max windows macros in favor of the std variants
-	UNICODE             # selects wide api variants over ansi for UTF16 windows functions
-	_UNICODE            # uses wide text types in the C runtime layer
-)
+if (WIN32)
+    # Preprocessor Defines
+    target_compile_definitions(KalaCLI PRIVATE
+        LIB_EXPORT          # dll import/export
+        WIN32_LEAN_AND_MEAN # cleaner windows.h
+        NOMINMAX            # skips min/max windows macros in favor of the std variants
+        UNICODE             # selects wide api variants over ansi for UTF16 windows functions
+        _UNICODE            # uses wide text types in the C runtime layer
+    )
+endif()
 	
 # Expose version string
 add_compile_definitions(
