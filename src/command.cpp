@@ -12,7 +12,6 @@
 
 using KalaHeaders::KalaLog::Log;
 using KalaHeaders::KalaLog::LogType;
-using KalaHeaders::KalaString::ContainsString;
 using KalaHeaders::KalaString::RemoveFromString;
 
 using std::system;
@@ -29,7 +28,7 @@ namespace KalaCLI
 		if (params.empty()) return false;
 
 		if (!COMMAND_PREFIX.empty()
-			&& !ContainsString(params[0], COMMAND_PREFIX.data()))
+			&& params[0].find(COMMAND_PREFIX.data()) == string::npos)
 		{
 			Log::Print(
 				"Target command '" + params[0] + "' is missing required prefix '" + COMMAND_PREFIX.data() + "'!",

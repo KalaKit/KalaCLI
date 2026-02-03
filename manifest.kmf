@@ -1,29 +1,29 @@
 #KMF VERSION 1.0
 
-//Manifest file for use with KalaMove. Read more at https://github.com/kalakit/kalamove
+//Manifest file for use with kalamove. Read more at https://github.com/kalakit/kalamove
 
 //
 // CORE STUFF
 //
 
 //copy readme
-origin: readme.md
-target: ..@KalaFont@_external_shared@KalaCLI@readme.md, ..@KalaModel@_external_shared@KalaCLI@readme.md, ..@KalaMove@_external_shared@KalaCLI@readme.md, ..@KalaMake@_external_shared@KalaCLI@readme.md
+origin: README.md
+target: ..@kalafont@_external_shared@KalaCLI@README.md, ..@kalamodel@_external_shared@KalaCLI@README.md, ..@kalamove@_external_shared@KalaCLI@README.md, ..@kalamake@_external_shared@KalaCLI@README.md
 action: forcecopy
 
 //copy license
 origin: LICENSE.md
-target: ..@KalaFont@_external_shared@KalaCLI@LICENSE.md, ..@KalaModel@_external_shared@KalaCLI@LICENSE.md, ..@KalaMove@_external_shared@KalaCLI@LICENSE.md, ..@KalaMake@_external_shared@KalaCLI@LICENSE.md
+target: ..@kalafont@_external_shared@KalaCLI@LICENSE.md, ..@kalamodel@_external_shared@KalaCLI@LICENSE.md, ..@kalamove@_external_shared@KalaCLI@LICENSE.md, ..@kalamake@_external_shared@KalaCLI@LICENSE.md
 action: forcecopy
 
 //copy include files
 origin: include
-target: ..@KalaFont@_external_shared@KalaCLI@include, ..@KalaModel@_external_shared@KalaCLI@include, ..@KalaMove@_external_shared@KalaCLI@include, ..@KalaMake@_external_shared@KalaCLI@include
+target: ..@kalafont@_external_shared@KalaCLI@include, ..@kalamodel@_external_shared@KalaCLI@include, ..@kalamove@_external_shared@KalaCLI@include, ..@kalamake@_external_shared@KalaCLI@include
 action: forcecopy
 
 //copy docs
 origin: docs
-target: ..@KalaFont@_external_shared@KalaCLI@docs, ..@KalaModel@_external_shared@KalaCLI@docs, ..@KalaMove@_external_shared@KalaCLI@docs, ..@KalaMake@_external_shared@KalaCLI@docs
+target: ..@kalafont@_external_shared@KalaCLI@docs, ..@kalamodel@_external_shared@KalaCLI@docs, ..@kalamove@_external_shared@KalaCLI@docs, ..@kalamake@_external_shared@KalaCLI@docs
 action: forcecopy
 
 //
@@ -31,28 +31,33 @@ action: forcecopy
 //
 
 //copy debug dll
-origin: debug@KalaCLI1d.dll
-target: ..@KalaFont@_external_shared@KalaCLI@debug@KalaCLI1d.dll, ..@KalaModel@_external_shared@KalaCLI@debug@KalaCLI1d.dll, ..@KalaMove@_external_shared@KalaCLI@debug@KalaCLI1d.dll, ..@KalaMake@_external_shared@KalaCLI@debug@KalaCLI1d.dll
+origin: build@windows-debug@libKalaCLI1d.dll
+target: ..@kalafont@_external_shared@KalaCLI@debug@libKalaCLI1d.dll, ..@kalamodel@_external_shared@KalaCLI@debug@libKalaCLI1d.dll, ..@kalamove@_external_shared@KalaCLI@debug@libKalaCLI1d.dll, ..@kalamake@_external_shared@KalaCLI@debug@libKalaCLI1d.dll
 action: forcecopy
 
 //copy debug lib
-origin: debug@KalaCLI1d.lib
-target: ..@KalaFont@_external_shared@KalaCLI@debug@KalaCLI1d.lib, ..@KalaModel@_external_shared@KalaCLI@debug@KalaCLI1d.lib, ..@KalaMove@_external_shared@KalaCLI@debug@KalaCLI1d.lib, ..@KalaMake@_external_shared@KalaCLI@debug@KalaCLI1d.lib
+origin: build@windows-debug@libKalaCLI1d.dll.a
+target: ..@kalafont@_external_shared@KalaCLI@debug@libKalaCLI1d.dll.a, ..@kalamodel@_external_shared@KalaCLI@debug@libKalaCLI1d.dll.a, ..@kalamove@_external_shared@KalaCLI@debug@libKalaCLI1d.dll.a, ..@kalamake@_external_shared@KalaCLI@debug@libKalaCLI1d.dll.a
 action: forcecopy
 
-//copy debug pdb
-origin: debug@KalaCLI1d.pdb
-target: ..@KalaFont@_external_shared@KalaCLI@debug@KalaCLI1d.pdb, ..@KalaModel@_external_shared@KalaCLI@debug@KalaCLI1d.pdb, ..@KalaMove@_external_shared@KalaCLI@debug@KalaCLI1d.pdb, ..@KalaMake@_external_shared@KalaCLI@debug@KalaCLI1d.pdb
+//copy debug so
+origin: build@linux-debug@libKalaCLI1d.so
+target: ..@kalafont@_external_shared@KalaCLI@debug@libKalaCLI1d.so, ..@kalamodel@_external_shared@KalaCLI@debug@libKalaCLI1d.so, ..@kalamove@_external_shared@KalaCLI@debug@libKalaCLI1d.so, ..@kalamake@_external_shared@KalaCLI@debug@libKalaCLI1d.so
 action: forcecopy
 
 //copy release dll
-origin: release@KalaCLI1.dll
-target: ..@KalaFont@_external_shared@KalaCLI@release@KalaCLI1.dll, ..@KalaModel@_external_shared@KalaCLI@release@KalaCLI1.dll, ..@KalaMove@_external_shared@KalaCLI@release@KalaCLI1.dll, ..@KalaMake@_external_shared@KalaCLI@release@KalaCLI1.dll
+origin: build@windows-release@libKalaCLI1.dll
+target: ..@kalafont@_external_shared@KalaCLI@release@libKalaCLI1.dll, ..@kalamodel@_external_shared@KalaCLI@release@libKalaCLI1.dll, ..@kalamove@_external_shared@KalaCLI@release@libKalaCLI1.dll, ..@kalamake@_external_shared@KalaCLI@release@libKalaCLI1.dll
 action: forcecopy
 
 //copy release lib
-origin: release@KalaCLI1.lib
-target: ..@KalaFont@_external_shared@KalaCLI@release@KalaCLI1.lib, ..@KalaModel@_external_shared@KalaCLI@release@KalaCLI1.lib, ..@KalaMove@_external_shared@KalaCLI@release@KalaCLI1.lib, ..@KalaMake@_external_shared@KalaCLI@release@KalaCLI1.lib
+origin: build@windows-release@libKalaCLI1.dll.a
+target: ..@kalafont@_external_shared@KalaCLI@release@libKalaCLI1.dll.a, ..@kalamodel@_external_shared@KalaCLI@release@libKalaCLI1.dll.a, ..@kalamove@_external_shared@KalaCLI@release@libKalaCLI1.dll.a, ..@kalamake@_external_shared@KalaCLI@release@libKalaCLI1.dll.a
+action: forcecopy
+
+//copy release so
+origin: build@linux-release@libKalaCLI1.so
+target: ..@kalafont@_external_shared@KalaCLI@release@libKalaCLI1.so, ..@kalamodel@_external_shared@KalaCLI@release@libKalaCLI1.so, ..@kalamove@_external_shared@KalaCLI@release@libKalaCLI1.so, ..@kalamake@_external_shared@KalaCLI@release@libKalaCLI1.so
 action: forcecopy
 
 //
@@ -61,5 +66,5 @@ action: forcecopy
 
 //KalaHeaders
 origin: _external_shared@KalaHeaders
-target: ..@KalaFont@_external_shared@KalaHeaders, ..@KalaModel@_external_shared@KalaHeaders, ..@KalaMove@_external_shared@KalaHeaders, ..@KalaMake@_external_shared@KalaHeaders
+target: ..@kalafont@_external_shared@KalaHeaders, ..@kalamodel@_external_shared@KalaHeaders, ..@kalamove@_external_shared@KalaHeaders, ..@kalamake@_external_shared@KalaHeaders
 action: copy

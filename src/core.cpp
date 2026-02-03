@@ -20,7 +20,6 @@ using KalaHeaders::KalaLog::Log;
 using KalaHeaders::KalaLog::LogType;
 using KalaHeaders::KalaLog::TimeFormat;
 using KalaHeaders::KalaLog::DateFormat;
-using KalaHeaders::KalaString::ContainsString;
 using KalaHeaders::KalaString::SplitString;
 using KalaHeaders::KalaString::TrimString;
 using KalaHeaders::KalaString::TokenizeString;
@@ -152,7 +151,7 @@ namespace KalaCLI
 			if (line.empty()) continue;
 
 			vector<string> splitCommands{};
-			if (ContainsString(line, "&"))
+			if (line.find("&") != string::npos)
 			{
 				splitCommands = SplitString(line, "&");
 			}
