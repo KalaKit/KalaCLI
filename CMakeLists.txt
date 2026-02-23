@@ -48,7 +48,7 @@ add_library(KalaCLI SHARED ${SOURCE_FILES})
 if (WIN32)
 	# Enable exception handling for MSVC
 	if (MSVC)
-		target_compile_options(KalaMove PRIVATE /EHsc)
+		target_compile_options(KalaCLI PRIVATE /EHsc)
 	endif()
 endif()
 	

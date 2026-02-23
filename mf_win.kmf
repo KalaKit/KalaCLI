@@ -1,0 +1,65 @@
+#KMF VERSION 1.0
+
+//Manifest file for use with kalamove. Read more at https://github.com/kalakit/kalamove
+
+//
+// CORE STUFF
+//
+
+//copy readme
+origin: README.md
+target: ..@kalafont@_external_shared@KalaCLI@README.md, ..@kalamodel@_external_shared@KalaCLI@README.md, ..@kalamove@_external_shared@KalaCLI@README.md, ..@kalamake@_external_shared@KalaCLI@README.md
+action: forcecopy
+
+//copy license
+origin: LICENSE.md
+target: ..@kalafont@_external_shared@KalaCLI@LICENSE.md, ..@kalamodel@_external_shared@KalaCLI@LICENSE.md, ..@kalamove@_external_shared@KalaCLI@LICENSE.md, ..@kalamake@_external_shared@KalaCLI@LICENSE.md
+action: forcecopy
+
+//copy include files
+origin: include
+target: ..@kalafont@_external_shared@KalaCLI@include, ..@kalamodel@_external_shared@KalaCLI@include, ..@kalamove@_external_shared@KalaCLI@include, ..@kalamake@_external_shared@KalaCLI@include
+action: forcecopy
+
+//copy docs
+origin: docs
+target: ..@kalafont@_external_shared@KalaCLI@docs, ..@kalamodel@_external_shared@KalaCLI@docs, ..@kalamove@_external_shared@KalaCLI@docs, ..@kalamake@_external_shared@KalaCLI@docs
+action: forcecopy
+
+//
+// BINARIES
+//
+
+//copy debug dll
+origin: build@windows-debug@KalaCLI1d.dll
+target: ..@kalafont@_external_shared@KalaCLI@debug@KalaCLI1d.dll, ..@kalamodel@_external_shared@KalaCLI@debug@KalaCLI1d.dll, ..@kalamove@_external_shared@KalaCLI@debug@KalaCLI1d.dll, ..@kalamake@_external_shared@KalaCLI@debug@KalaCLI1d.dll
+action: forcecopy
+
+//copy debug lib
+origin: build@windows-debug@KalaCLI1d.lib
+target: ..@kalafont@_external_shared@KalaCLI@debug@KalaCLI1d.lib, ..@kalamodel@_external_shared@KalaCLI@debug@KalaCLI1d.lib, ..@kalamove@_external_shared@KalaCLI@debug@KalaCLI1d.lib, ..@kalamake@_external_shared@KalaCLI@debug@KalaCLI1d.lib
+action: forcecopy
+
+//copy debug pdb
+origin: build@windows-debug@KalaCLI1d.pdb
+target: ..@kalafont@_external_shared@KalaCLI@debug@KalaCLI1d.pdb, ..@kalamodel@_external_shared@KalaCLI@debug@KalaCLI1d.pdb, ..@kalamove@_external_shared@KalaCLI@debug@KalaCLI1d.pdb, ..@kalamake@_external_shared@KalaCLI@debug@KalaCLI1d.pdb
+action: forcecopy
+
+//copy release dll
+origin: build@windows-release@KalaCLI1.dll
+target: ..@kalafont@_external_shared@KalaCLI@release@KalaCLI1.dll, ..@kalamodel@_external_shared@KalaCLI@release@KalaCLI1.dll, ..@kalamove@_external_shared@KalaCLI@release@KalaCLI1.dll, ..@kalamake@_external_shared@KalaCLI@release@KalaCLI1.dll
+action: forcecopy
+
+//copy release lib
+origin: build@windows-release@KalaCLI1.lib
+target: ..@kalafont@_external_shared@KalaCLI@release@KalaCLI1.lib, ..@kalamodel@_external_shared@KalaCLI@release@KalaCLI1.lib, ..@kalamove@_external_shared@KalaCLI@release@KalaCLI1.lib, ..@kalamake@_external_shared@KalaCLI@release@KalaCLI1.lib
+action: forcecopy
+
+//
+// EXTERNAL LIBRARIES
+//
+
+//KalaHeaders
+origin: _external_shared@KalaHeaders
+target: ..@kalafont@_external_shared@KalaHeaders, ..@kalamodel@_external_shared@KalaHeaders, ..@kalamove@_external_shared@KalaHeaders, ..@kalamake@_external_shared@KalaHeaders
+action: copy

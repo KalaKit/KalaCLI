@@ -3,11 +3,14 @@
 //This is free software, and you are welcome to redistribute it under certain conditions.
 //Read LICENSE.md for more information.
 
+#ifdef __linux__
+#include <csignal>
+#endif
+
 #include <iostream>
 #include <string>
 #include <vector>
 #include <filesystem>
-#include <csignal>
 
 #include "KalaHeaders/log_utils.hpp"
 #include "KalaHeaders/string_utils.hpp"
@@ -34,6 +37,10 @@ using KalaCLI::Core;
 using KalaCLI::Command;
 using KalaCLI::CommandManager;
 
+#ifdef __linux__
+using std::raise;
+#endif
+
 using std::cin;
 using std::getline;
 using std::ostringstream;
@@ -44,8 +51,6 @@ using std::filesystem::current_path;
 using std::filesystem::path;
 using std::filesystem::weakly_canonical;
 using std::filesystem::filesystem_error;
-using std::raise;
-using std::abort;
 
 static void AddBuiltInCommands();
 
