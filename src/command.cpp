@@ -43,7 +43,7 @@ namespace KalaCLI
 
 		if (!COMMAND_PREFIX.empty()) cleanedParams[0] = RemoveFromString(cleanedParams[0], COMMAND_PREFIX.data());
 		
-		if (cleanedParams[0] == "r")
+		if (cleanedParams[0] == "run")
 		{
 			if (cleanedParams.size() == 1)
 			{
@@ -78,7 +78,7 @@ namespace KalaCLI
 
 		for (const auto& c : commands)
 		{
-			if (find(c.primary.begin(), c.primary.end(), cleanedParams[0]) != c.primary.end())
+			if (c.primaryParam == cleanedParams[0])
 			{
 				if (cleanedParams.size() == c.paramCount)
 				{
@@ -94,17 +94,6 @@ namespace KalaCLI
 
 				return false;
 			}
-		}
-
-		if (foundCommand.primary.empty())
-		{
-			Log::Print(
-				"Failed to run command '" + cleanedParams[0] + "'! The command does not exist.",
-				"PARSE",
-				LogType::LOG_ERROR,
-				2);
-
-			return false;
 		}
 
 		if (foundCommand.paramCount == 0)
@@ -137,7 +126,7 @@ namespace KalaCLI
 	bool CommandManager::AddCommand(Command newValue)
 	{
 		//skip empty commands
-		if (newValue.primary.size() == 0
+		if (newValue.primaryParam.empty()
 			|| newValue.paramCount == 0
 			|| !newValue.targetFunction)
 		{
@@ -150,21 +139,32 @@ namespace KalaCLI
 			return false;
 		}
 
+		if (newValue.primaryParam.size() > 20)
+		{
+			Log::Print(
+				"Skipped adding command with parameter '" + newValue.primaryParam + "' because it is too long.",
+				"COMMAND",
+				LogType::LOG_WARNING);
+
+			return false;
+		}
+
+		Log::Print(
+			"Adding parameter '" + newValue.primaryParam + "'.",
+			"COMMAND",
+			LogType::LOG_INFO);
+
 		//skip existing primary variants
 		for (const auto& c : commands)
 		{
-			for (const auto& p : newValue.primary)
+			if (newValue.primaryParam == c.primaryParam)
 			{
-				if (find(c.primary.begin(), c.primary.end(), p) != c.primary.end())
-				{
-					Log::Print(
-						"Failed to add a command because its primary parameter '" + p + "' is already in use by another command!",
-						"COMMAND",
-						LogType::LOG_ERROR,
-						2);
+				Log::Print(
+					"Skipped adding command with primary parameter '" + newValue.primaryParam + "' because it has already been used in another command.",
+					"COMMAND",
+					LogType::LOG_WARNING);
 
-					return false;
-				}
+				return false;
 			}
 		}
 

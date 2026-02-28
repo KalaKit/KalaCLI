@@ -220,14 +220,14 @@ void AddBuiltInCommands()
 {
 	Command cmd_help
 	{
-		.primary = { "h" },
+		.primaryParam = "help",
 		.description = "Lists all available commands.",
 		.paramCount = 1,
 		.targetFunction = Command_Help
 	};
 	Command cmd_info
 	{
-		.primary = { "i" },
+		.primaryParam = "info",
 		.description = "Lists info about chosen command.",
 		.paramCount = 2,
 		.targetFunction = Command_Info
@@ -235,21 +235,21 @@ void AddBuiltInCommands()
 
 	Command cmd_where
 	{
-		.primary = { "w" },
+		.primaryParam = "where",
 		.description = "Displays current path.",
 		.paramCount = 1,
 		.targetFunction = Command_Where
 	};
 	Command cmd_list
 	{
-		.primary = { "l" },
+		.primaryParam = "list",
 		.description = "Lists all files and folders in current directory.",
 		.paramCount = 1,
 		.targetFunction = Command_List
 	};
 	Command cmd_go
 	{
-		.primary = { "g" },
+		.primaryParam = "go",
 		.description = "Goes to chosen directory.",
 		.paramCount = 2,
 		.targetFunction = Command_Go
@@ -257,21 +257,21 @@ void AddBuiltInCommands()
 
 	Command cmd_createdir
 	{
-		.primary = { "cd" },
+		.primaryParam = "cd",
 		.description = "Creates a new directory at the chosen path.",
 		.paramCount = 2,
 		.targetFunction = Command_CreateDir
 	};
 	Command cmd_delete
 	{
-		.primary = { "dl" },
+		.primaryParam = "dl",
 		.description = "Deletes file or directory at the chosen path.",
 		.paramCount = 2,
 		.targetFunction = Command_Delete
 	};
 	Command cmd_rename
 	{
-		.primary = { "rn" },
+		.primaryParam = "rn",
 		.description = 
 			"Renames target file or directory to new value. "
 			"Second path must be path to existing file, "
@@ -281,7 +281,7 @@ void AddBuiltInCommands()
 	};
 	Command cmd_move
 	{
-		.primary = { "mv" },
+		.primaryParam = "mv",
 		.description = 
 			"Moves target file or directory to new path, "
 			"overwrites file or directory at target path if it already exists.",
@@ -290,7 +290,7 @@ void AddBuiltInCommands()
 	};
 	Command cmd_copy
 	{
-		.primary = { "cp" },
+		.primaryParam = "cp",
 		.description =
 			"Copies target file or directory to new chosen path, "
 			"skips copy if new path already exists.",
@@ -299,7 +299,7 @@ void AddBuiltInCommands()
 	};
 	Command cmd_forcecopy
 	{
-		.primary = { "fc" },
+		.primaryParam = "fc",
 		.description = 
 			"Copies target file or directory to new chosen path, "
 			"overwrites file or directory at target path if it already exists.",
@@ -309,21 +309,21 @@ void AddBuiltInCommands()
 
 	Command cmd_clear
 	{
-		.primary = { "c" },
+		.primaryParam = "c",
 		.description = "Clears the console from all messages.",
 		.paramCount = 1,
 		.targetFunction = Command_Clear
 	};
 	Command cmd_exit
 	{
-		.primary = { "e" },
+		.primaryParam = "e",
 		.description = "Asks for user to press enter to close the cli, good for reading messages before quitting.",
 		.paramCount = 1,
 		.targetFunction = Command_Exit
 	};
 	Command cmd_qe
 	{
-		.primary = { "q" },
+		.primaryParam = "q",
 		.description = "Quickly exits this cli without any 'Press Enter to quit' confirmation.",
 		.paramCount = 1,
 		.targetFunction = Command_Exit
@@ -356,19 +356,10 @@ void Command_Help(const vector<string>& params)
 		<< " second parameter to get more info about that command.\n"
 		<< "Use the ampersand (&) symbol to stack commands, for example '--l & --q' to list and quick exit.\n\n"
 		<< "Listing all commands:\n"
-		<< "  r\n";
+		<< "  run\n";
 	for (const auto& c : CommandManager::GetCommands())
 	{
-		for (const auto& p : c.primary)
-		{
-			if (p == c.primary[0]) result << "  ";
-			result << p;
-			if (p != c.primary[c.primary.size() - 1])
-			{
-				result << ", ";
-			}
-			else result << "\n";
-		}
+		result << "  " << c.primaryParam << "\n";
 	}
 
 	Log::Print(result.str());
@@ -382,7 +373,7 @@ void Command_Info(const vector<string>& params)
 
 	result << "\n";
 	
-	if (command == "r")
+	if (command == "run")
 	{
 		result << "Runs selected user command with any amount of parameters.";
 		
@@ -395,14 +386,14 @@ void Command_Info(const vector<string>& params)
 
 	for (const auto& c : CommandManager::GetCommands())
 	{
-		if (find(c.primary.begin(), c.primary.end(), command) != c.primary.end())
+		if (c.primaryParam == command)
 		{
 			cmd = c;
 			break;
 		}
 	}
 	
-	if (cmd.primary.empty()
+	if (cmd.primaryParam.empty()
 		&& cmd.paramCount == 0
 		&& !cmd.targetFunction)
 	{
@@ -415,17 +406,7 @@ void Command_Info(const vector<string>& params)
 		return;
 	}
 
-	result << "primary variants: ";
-	for (const auto& p : cmd.primary)
-	{
-		result << p;
-		if (p != cmd.primary[cmd.primary.size() - 1])
-		{
-			result << ", ";
-		}
-		else result << "\n";
-	}
-
+	result << "primary variant: " << cmd.primaryParam << "\n";
 	result << "description: " << cmd.description << "\n";
 	result << "parameter count: " << to_string(cmd.paramCount);
 
