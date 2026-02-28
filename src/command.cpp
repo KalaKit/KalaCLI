@@ -131,10 +131,9 @@ namespace KalaCLI
 			|| !newValue.targetFunction)
 		{
 			Log::Print(
-				"Failed to add a command because it has no primary parameter, parameter count or target function!",
+				"Skipped adding invalid command because it has no primary parameter, parameter count or target function!",
 				"COMMAND",
-				LogType::LOG_ERROR,
-				2);
+				LogType::LOG_WARNING);
 
 			return false;
 		}
@@ -148,11 +147,6 @@ namespace KalaCLI
 
 			return false;
 		}
-
-		Log::Print(
-			"Adding parameter '" + newValue.primaryParam + "'.",
-			"COMMAND",
-			LogType::LOG_INFO);
 
 		//skip existing primary variants
 		for (const auto& c : commands)
