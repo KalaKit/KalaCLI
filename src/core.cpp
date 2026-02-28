@@ -352,9 +352,9 @@ void Command_Help(const vector<string>& params)
 {
 	ostringstream result{};
 
-	result << "\nType '--i' with a command name as the"
+	result << "\nType '--info' with a command name as the"
 		<< " second parameter to get more info about that command.\n"
-		<< "Use the ampersand (&) symbol to stack commands, for example '--l & --q' to list and quick exit.\n\n"
+		<< "Use the ampersand (&) symbol to stack commands, for example '--list & --quit' to list and quick exit.\n\n"
 		<< "Listing all commands:\n"
 		<< "  run\n";
 	for (const auto& c : CommandManager::GetCommands())
