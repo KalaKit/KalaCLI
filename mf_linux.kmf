@@ -30,14 +30,14 @@ action: forcecopy
 // BINARIES
 //
 
-//copy debug so
-origin: build@linux-debug@libKalaCLI1d.so
-target: ..@kalafont@_external_shared@KalaCLI@debug@libKalaCLI1d.so, ..@kalamodel@_external_shared@KalaCLI@debug@libKalaCLI1d.so, ..@kalamove@_external_shared@KalaCLI@debug@libKalaCLI1d.so, ..@kalamake@_external_shared@KalaCLI@debug@libKalaCLI1d.so
+//copy debug a
+origin: build@debug-linux@libKalaCLI1d.a
+target: ..@kalafont@_external_shared@KalaCLI@debug@libKalaCLI1d.a, ..@kalamodel@_external_shared@KalaCLI@debug@libKalaCLI1d.a, ..@kalamove@_external_shared@KalaCLI@debug@libKalaCLI1d.a, ..@kalamake@_external_shared@KalaCLI@debug@libKalaCLI1d.a
 action: forcecopy
 
-//copy release so
-origin: build@linux-release@libKalaCLI1.so
-target: ..@kalafont@_external_shared@KalaCLI@release@libKalaCLI1.so, ..@kalamodel@_external_shared@KalaCLI@release@libKalaCLI1.so, ..@kalamove@_external_shared@KalaCLI@release@libKalaCLI1.so, ..@kalamake@_external_shared@KalaCLI@release@libKalaCLI1.so
+//copy release a
+origin: build@release-linux@libKalaCLI1.a
+target: ..@kalafont@_external_shared@KalaCLI@release@libKalaCLI1.a, ..@kalamodel@_external_shared@KalaCLI@release@libKalaCLI1.a, ..@kalamove@_external_shared@KalaCLI@release@libKalaCLI1.a, ..@kalamake@_external_shared@KalaCLI@release@libKalaCLI1.a
 action: forcecopy
 
 //

@@ -30,28 +30,18 @@ action: forcecopy
 // BINARIES
 //
 
-//copy debug dll
-origin: build@windows-debug@KalaCLI1d.dll
-target: ..@kalafont@_external_shared@KalaCLI@debug@KalaCLI1d.dll, ..@kalamodel@_external_shared@KalaCLI@debug@KalaCLI1d.dll, ..@kalamove@_external_shared@KalaCLI@debug@KalaCLI1d.dll, ..@kalamake@_external_shared@KalaCLI@debug@KalaCLI1d.dll
-action: forcecopy
-
 //copy debug lib
-origin: build@windows-debug@KalaCLI1d.lib
+origin: build@debug-windows@KalaCLI1d.lib
 target: ..@kalafont@_external_shared@KalaCLI@debug@KalaCLI1d.lib, ..@kalamodel@_external_shared@KalaCLI@debug@KalaCLI1d.lib, ..@kalamove@_external_shared@KalaCLI@debug@KalaCLI1d.lib, ..@kalamake@_external_shared@KalaCLI@debug@KalaCLI1d.lib
 action: forcecopy
 
 //copy debug pdb
-origin: build@windows-debug@KalaCLI1d.pdb
+origin: build@debug-windows@KalaCLI1d.pdb
 target: ..@kalafont@_external_shared@KalaCLI@debug@KalaCLI1d.pdb, ..@kalamodel@_external_shared@KalaCLI@debug@KalaCLI1d.pdb, ..@kalamove@_external_shared@KalaCLI@debug@KalaCLI1d.pdb, ..@kalamake@_external_shared@KalaCLI@debug@KalaCLI1d.pdb
 action: forcecopy
 
-//copy release dll
-origin: build@windows-release@KalaCLI1.dll
-target: ..@kalafont@_external_shared@KalaCLI@release@KalaCLI1.dll, ..@kalamodel@_external_shared@KalaCLI@release@KalaCLI1.dll, ..@kalamove@_external_shared@KalaCLI@release@KalaCLI1.dll, ..@kalamake@_external_shared@KalaCLI@release@KalaCLI1.dll
-action: forcecopy
-
 //copy release lib
-origin: build@windows-release@KalaCLI1.lib
+origin: build@release-windows@KalaCLI1.lib
 target: ..@kalafont@_external_shared@KalaCLI@release@KalaCLI1.lib, ..@kalamodel@_external_shared@KalaCLI@release@KalaCLI1.lib, ..@kalamove@_external_shared@KalaCLI@release@KalaCLI1.lib, ..@kalamake@_external_shared@KalaCLI@release@KalaCLI1.lib
 action: forcecopy
 
