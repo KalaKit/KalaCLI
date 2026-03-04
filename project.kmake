@@ -10,7 +10,7 @@ standard: c++20
 binarytype: static
 sources: "src"
 headers: "include", #kh
-warninglevel: none
+warninglevel: normal
 
 #profile debug-windows
 binaryname: KalaCLI1d
@@ -21,7 +21,7 @@ buildpath: "build/debug-windows"
 #profile release-windows
 binaryname: KalaCLI1
 compiler: clang-cl
-buildtype: release
+buildtype: minsizerel
 buildpath: "build/release-windows"
 
 #profile debug-linux
@@ -33,5 +33,5 @@ buildpath: "build/debug-linux"
 #profile release-linux
 binaryname: libKalaCLI1
 compiler: clang++
-buildtype: release
+buildtype: minsizerel
 buildpath: "build/release-linux"
