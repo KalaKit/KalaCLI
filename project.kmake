@@ -12,6 +12,7 @@ binarytype: static
 sources: "src"
 headers: "include", #kh
 warninglevel: normal
+customflags: export-compile-commands
 
 #profile debug-windows
 binaryname: KalaCLI1d
