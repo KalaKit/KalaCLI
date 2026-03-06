@@ -6,6 +6,7 @@
 kh: "_external_shared"
 
 #global
+compilerlauncher: ccache
 standard: c++20
 binarytype: static
 sources: "src"
