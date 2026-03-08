@@ -2,38 +2,40 @@
 
 #version 1.0
 
-#include
-kh: "_external_shared"
+#references
+name_bin: KalaCLI1
+dir_release: build/release-
+dir_debug: build/debug-
 
 #global
 compilerlauncher: ccache
 standard: c++20
 binarytype: static
 sources: "src"
-headers: "include", #kh
+headers: "include", "_external_shared"
 warninglevel: normal
 customflags: export-compile-commands
 
 #profile debug-windows
-binaryname: KalaCLI1d
+binaryname: ${name_bin}d
 compiler: clang-cl
 buildtype: debug
-buildpath: "build/debug-windows"
+buildpath: "${dir_debug}windows"
 
 #profile release-windows
-binaryname: KalaCLI1
+binaryname: ${name_bin}
 compiler: clang-cl
 buildtype: minsizerel
-buildpath: "build/release-windows"
+buildpath: "${dir_release}windows"
 
 #profile debug-linux
-binaryname: libKalaCLI1d
+binaryname: lib${name_bin}d
 compiler: clang++
 buildtype: debug
-buildpath: "build/debug-linux"
+buildpath: "${dir_debug}linux"
 
 #profile release-linux
-binaryname: libKalaCLI1
+binaryname: lib${name_bin}
 compiler: clang++
 buildtype: minsizerel
-buildpath: "build/release-linux"
+buildpath: "${dir_release}linux"
