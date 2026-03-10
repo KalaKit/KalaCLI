@@ -12,7 +12,7 @@ compilerlauncher: ccache
 standard: c++20
 binarytype: static
 sources: "src"
-headers: "include", "_external_shared"
+headers: "include", "_external_shared/KalaHeaders"
 warninglevel: normal
 customflags: export-compile-commands
 
@@ -39,3 +39,4 @@ binaryname: lib${name_bin}
 compiler: clang++
 buildtype: minsizerel
 buildpath: "${dir_release}linux"
+customflags: linux-strip-symbols

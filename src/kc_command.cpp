@@ -5,10 +5,10 @@
 
 #include <sstream>
 
-#include "KalaHeaders/log_utils.hpp"
-#include "KalaHeaders/string_utils.hpp"
+#include "log_utils.hpp"
+#include "string_utils.hpp"
 
-#include "command.hpp"
+#include "kc_command.hpp"
 
 using KalaHeaders::KalaLog::Log;
 using KalaHeaders::KalaLog::LogType;
