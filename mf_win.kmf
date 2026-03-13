@@ -35,11 +35,6 @@ origin: build@debug-windows@KalaCLI1d.lib
 target: ..@kalafont@_external_shared@KalaCLI@debug@KalaCLI1d.lib, ..@kalamodel@_external_shared@KalaCLI@debug@KalaCLI1d.lib, ..@kalamove@_external_shared@KalaCLI@debug@KalaCLI1d.lib, ..@kalamake@_external_shared@KalaCLI@debug@KalaCLI1d.lib
 action: forcecopy
 
-//copy debug pdb
-origin: build@debug-windows@KalaCLI1d.pdb
-target: ..@kalafont@_external_shared@KalaCLI@debug@KalaCLI1d.pdb, ..@kalamodel@_external_shared@KalaCLI@debug@KalaCLI1d.pdb, ..@kalamove@_external_shared@KalaCLI@debug@KalaCLI1d.pdb, ..@kalamake@_external_shared@KalaCLI@debug@KalaCLI1d.pdb
-action: forcecopy
-
 //copy release lib
 origin: build@release-windows@KalaCLI1.lib
 target: ..@kalafont@_external_shared@KalaCLI@release@KalaCLI1.lib, ..@kalamodel@_external_shared@KalaCLI@release@KalaCLI1.lib, ..@kalamove@_external_shared@KalaCLI@release@KalaCLI1.lib, ..@kalamake@_external_shared@KalaCLI@release@KalaCLI1.lib
