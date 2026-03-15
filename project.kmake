@@ -3,7 +3,7 @@
 #version 1.0
 
 #references
-name_bin: KalaCLI1
+name_bin: kalacli
 dir_release: build/release-
 dir_debug: build/debug-
 
@@ -15,7 +15,7 @@ sources: "src"
 headers: "include", "_external_shared/KalaHeaders"
 defines: LIB_STATIC
 warninglevel: normal
-customflags: export-compile-commands
+customflags: export-compile-commands, export-vscode-sln
 
 #profile debug-windows
 binaryname: ${name_bin}d
@@ -40,4 +40,4 @@ binaryname: lib${name_bin}
 compiler: clang++
 buildtype: minsizerel
 buildpath: "${dir_release}linux"
-customflags: linux-strip-symbols
+postbuildaction: strip --strip-unneeded ${dir_release}linux/${name_bin}.a
