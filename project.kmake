@@ -29,6 +29,20 @@ compiler: clang-cl
 buildtype: minsizerel
 buildpath: "${dir_release}windows"
 
+#profile debug-windows-from-linux
+binaryname: ${name_bin}wind
+compiler: clang++
+buildtype: debug
+buildpath: "${dir_debug}windows-from-linux"
+targettype: windows-gnu
+
+#profile release-windows-from-linux
+binaryname: ${name_bin}win
+compiler: clang++
+buildtype: minsizerel
+buildpath: "${dir_release}windows-from-linux"
+targettype: windows-gnu
+
 #profile debug-linux
 binaryname: lib${name_bin}d
 compiler: clang++
