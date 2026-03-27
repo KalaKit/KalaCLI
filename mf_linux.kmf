@@ -8,43 +8,34 @@
 
 //copy readme
 origin: README.md
-target: ..@kalafont@_external_shared@KalaCLI@README.md, ..@kalamodel@_external_shared@KalaCLI@README.md, ..@kalamove@_external_shared@KalaCLI@README.md, ..@kalamake@_external_shared@KalaCLI@README.md
+target: ..@external-shared@KalaCLI@README.md
 action: forcecopy
 
 //copy license
 origin: LICENSE.md
-target: ..@kalafont@_external_shared@KalaCLI@LICENSE.md, ..@kalamodel@_external_shared@KalaCLI@LICENSE.md, ..@kalamove@_external_shared@KalaCLI@LICENSE.md, ..@kalamake@_external_shared@KalaCLI@LICENSE.md
+target: ..@external-shared@KalaCLI@LICENSE.md
 action: forcecopy
 
 //copy include files
 origin: include
-target: ..@kalafont@_external_shared@KalaCLI@include, ..@kalamodel@_external_shared@KalaCLI@include, ..@kalamove@_external_shared@KalaCLI@include, ..@kalamake@_external_shared@KalaCLI@include
+target: ..@external-shared@KalaCLI@include
 action: forcecopy
 
 //copy docs
 origin: docs
-target: ..@kalafont@_external_shared@KalaCLI@docs, ..@kalamodel@_external_shared@KalaCLI@docs, ..@kalamove@_external_shared@KalaCLI@docs, ..@kalamake@_external_shared@KalaCLI@docs
+target: ..@external-shared@KalaCLI@docs
 action: forcecopy
 
 //
 // BINARIES
 //
 
-//copy debug a
+//copy debug
 origin: build@debug-linux@libkalaclid.a
-target: ..@kalafont@_external_shared@KalaCLI@debug@libkalaclid.a, ..@kalamodel@_external_shared@KalaCLI@debug@libkalaclid.a, ..@kalamove@_external_shared@KalaCLI@debug@libkalaclid.a, ..@kalamake@_external_shared@KalaCLI@debug@libkalaclid.a
+target: ..@external-shared@KalaCLI@debug@libkalaclid.a
 action: forcecopy
 
-//copy release a
+//copy release
 origin: build@release-linux@libkalacli.a
-target: ..@kalafont@_external_shared@KalaCLI@release@libkalacli.a, ..@kalamodel@_external_shared@KalaCLI@release@libkalacli.a, ..@kalamove@_external_shared@KalaCLI@release@libkalacli.a, ..@kalamake@_external_shared@KalaCLI@release@libkalacli.a
+target: ..@external-shared@KalaCLI@release@libkalacli.a
 action: forcecopy
-
-//
-// EXTERNAL LIBRARIES
-//
-
-//KalaHeaders
-origin: _external_shared@KalaHeaders
-target: ..@kalafont@_external_shared@KalaHeaders, ..@kalamodel@_external_shared@KalaHeaders, ..@kalamove@_external_shared@KalaHeaders, ..@kalamake@_external_shared@KalaHeaders
-action: copy
