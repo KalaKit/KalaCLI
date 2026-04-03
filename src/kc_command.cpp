@@ -80,41 +80,19 @@ namespace KalaCLI
 		{
 			if (c.primaryParam == cleanedParams[0])
 			{
-				if (cleanedParams.size() == c.paramCount)
-				{
-					foundCommand = c;
-					break;
-				}
-				
-				Log::Print(
-					"Failed to run command '" + cleanedParams[0] + "'! Incorrect amount of parameters were passed for the command.",
-					"PARSE",
-					LogType::LOG_ERROR,
-					2);
-
-				return false;
+				foundCommand = c;
+				break;
 			}
 		}
 
-		if (foundCommand.paramCount == 0)
+		if (foundCommand.primaryParam.empty())
 		{
 			Log::Print(
-				"Target command '" + cleanedParams[0] + "' has an invalid param count!",
+				"Failed to run command '" + cleanedParams[0] + "' because it does not exist.",
 				"PARSE",
 				LogType::LOG_ERROR,
 				2);
-
-			return false;
-		}
-
-		if (!foundCommand.targetFunction)
-		{
-			Log::Print(
-				"Target command '" + cleanedParams[0] + "' has no attached function!",
-				"PARSE",
-				LogType::LOG_ERROR,
-				2);
-
+				
 			return false;
 		}
 
@@ -125,13 +103,19 @@ namespace KalaCLI
 
 	bool CommandManager::AddCommand(Command newValue)
 	{
-		//skip empty commands
-		if (newValue.primaryParam.empty()
-			|| newValue.paramCount == 0
-			|| !newValue.targetFunction)
+		if (newValue.primaryParam.empty())
 		{
 			Log::Print(
-				"Skipped adding invalid command because it has no primary parameter, parameter count or target function!",
+				"Skipped adding invalid command because it has no primary parameter!",
+				"COMMAND",
+				LogType::LOG_WARNING);
+
+			return false;
+		}
+		if (!newValue.targetFunction)
+		{
+			Log::Print(
+				"Skipped adding invalid command because it has no target function!",
 				"COMMAND",
 				LogType::LOG_WARNING);
 

@@ -45,7 +45,6 @@ using std::cin;
 using std::getline;
 using std::ostringstream;
 using std::string;
-using std::to_string;
 using std::vector;
 using std::filesystem::current_path;
 using std::filesystem::path;
@@ -140,7 +139,7 @@ namespace KalaCLI
 			if (!params.empty()) CommandManager::ParseCommand(params);
 
 			//always exits if a command was passed, otherwise goes into cli mode
-			Command_Exit({});
+			Command_Exit({"q"});
 		}
 
 		string line{};
@@ -222,51 +221,54 @@ void AddBuiltInCommands()
 	{
 		.primaryParam = "help",
 		.description = "Lists all available commands.",
-		.paramCount = 1,
 		.targetFunction = Command_Help
 	};
 	Command cmd_info
 	{
 		.primaryParam = "info",
-		.description = "Lists info about chosen command.",
-		.paramCount = 2,
+		.description =
+			"Lists info about chosen command, "
+			"requires a target command as its argument.",
 		.targetFunction = Command_Info
 	};
 
 	Command cmd_where
 	{
 		.primaryParam = "where",
-		.description = "Displays current path.",
-		.paramCount = 1,
+		.description =
+			"Displays current path, "
+			"requires a target path as its argument.",
 		.targetFunction = Command_Where
 	};
 	Command cmd_list
 	{
 		.primaryParam = "list",
-		.description = "Lists all files and folders in current directory.",
-		.paramCount = 1,
+		.description = "Lists all files and folders in current or target directory.",
 		.targetFunction = Command_List
 	};
 	Command cmd_go
 	{
 		.primaryParam = "go",
-		.description = "Goes to chosen directory.",
-		.paramCount = 2,
+		.description =
+			"Goes to chosen directory, "
+			"requires a target path as its argument.",
 		.targetFunction = Command_Go
 	};
 
 	Command cmd_createdir
 	{
 		.primaryParam = "cd",
-		.description = "Creates a new directory at the chosen path.",
-		.paramCount = 2,
+		.description =
+			"Creates a new directory at the chosen path, "
+			"requires a target path as its argument.",
 		.targetFunction = Command_CreateDir
 	};
 	Command cmd_delete
 	{
 		.primaryParam = "dl",
-		.description = "Deletes file or directory at the chosen path.",
-		.paramCount = 2,
+		.description =
+			"Deletes file or directory at the chosen path, "
+			"requires a target path as its argument.",
 		.targetFunction = Command_Delete
 	};
 	Command cmd_rename
@@ -276,7 +278,6 @@ void AddBuiltInCommands()
 			"Renames target file or directory to new value. "
 			"Second path must be path to existing file, "
 			"third parameter must be its new name only.",
-		.paramCount = 3,
 		.targetFunction = Command_Rename
 	};
 	Command cmd_move
@@ -285,7 +286,6 @@ void AddBuiltInCommands()
 		.description = 
 			"Moves target file or directory to new path, "
 			"overwrites file or directory at target path if it already exists.",
-		.paramCount = 3,
 		.targetFunction = Command_Move
 	};
 	Command cmd_copy
@@ -294,7 +294,6 @@ void AddBuiltInCommands()
 		.description =
 			"Copies target file or directory to new chosen path, "
 			"skips copy if new path already exists.",
-		.paramCount = 3,
 		.targetFunction = Command_Copy
 	};
 	Command cmd_forcecopy
@@ -303,7 +302,6 @@ void AddBuiltInCommands()
 		.description = 
 			"Copies target file or directory to new chosen path, "
 			"overwrites file or directory at target path if it already exists.",
-		.paramCount = 3,
 		.targetFunction = Command_ForceCopy
 	};
 
@@ -311,21 +309,18 @@ void AddBuiltInCommands()
 	{
 		.primaryParam = "c",
 		.description = "Clears the console from all messages.",
-		.paramCount = 1,
 		.targetFunction = Command_Clear
 	};
 	Command cmd_exit
 	{
 		.primaryParam = "e",
 		.description = "Asks for user to press enter to close the cli, good for reading messages before quitting.",
-		.paramCount = 1,
 		.targetFunction = Command_Exit
 	};
 	Command cmd_qe
 	{
 		.primaryParam = "q",
 		.description = "Quickly exits this cli without any 'Press Enter to quit' confirmation.",
-		.paramCount = 1,
 		.targetFunction = Command_Exit
 	};
 
@@ -350,6 +345,17 @@ void AddBuiltInCommands()
 
 void Command_Help(const vector<string>& params)
 {
+	if (params.size() > 1)
+	{
+		Log::Print(
+			"Command 'help' does not allow any arguments!",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+
 	ostringstream result{};
 
 	result << "\nType '--info' with a command name as the"
@@ -367,6 +373,27 @@ void Command_Help(const vector<string>& params)
 
 void Command_Info(const vector<string>& params)
 {
+	if (params.size() == 1)
+	{
+		Log::Print(
+			"Command 'info' got no arguments! You must pass one target command name.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+	if (params.size() > 2)
+	{
+		Log::Print(
+			"Command 'info' only allows one argument! You must pass one target command name.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+
 	string command = params[1];
 
 	ostringstream result{};
@@ -393,12 +420,10 @@ void Command_Info(const vector<string>& params)
 		}
 	}
 	
-	if (cmd.primaryParam.empty()
-		&& cmd.paramCount == 0
-		&& !cmd.targetFunction)
+	if (cmd.primaryParam.empty())
 	{
 		Log::Print(
-			"Cannot print info about a command that doesn't exist!",
+			"Failed to get info for command '" + params[1] + "' because it does not exist!",
 			"PARSE",
 			LogType::LOG_ERROR,
 			2);
@@ -408,13 +433,23 @@ void Command_Info(const vector<string>& params)
 
 	result << "primary variant: " << cmd.primaryParam << "\n";
 	result << "description: " << cmd.description << "\n";
-	result << "parameter count: " << to_string(cmd.paramCount);
 
 	Log::Print(result.str());
 }
 
 void Command_Where(const vector<string>& params)
 {
+	if (params.size() > 1)
+	{
+		Log::Print(
+			"Command 'where' does not allow any arguments!",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+
 	string& currentDir = Core::GetCurrentDir();
 
 	if (currentDir.empty()) currentDir = current_path().string();
@@ -423,18 +458,33 @@ void Command_Where(const vector<string>& params)
 
 void Command_List(const vector<string>& params)
 {
-	string& currentDir = Core::GetCurrentDir();
+	if (params.size() > 2)
+	{
+		Log::Print(
+			"Command 'list' only allows one optional argument! You must pass one path or no arguments.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
 
-	if (currentDir.empty()) currentDir = current_path().string();
+		return;
+	}
+
+	string targetDir = params.size() == 1 
+		? Core::GetCurrentDir()
+		: params[1];
+
+	if (targetDir.empty()) targetDir = params.size() == 1 
+		? current_path().string()
+		: (path(KalaCLI::currentDir) / targetDir).string() ;
 
 	vector<path> content{};
 
-	string result = ListDirectoryContents(currentDir, content);
+	string result = ListDirectoryContents(targetDir, content);
 
 	if (!result.empty())
 	{
 		Log::Print(
-			"Failed to list current directory contents! Reason: " + result,
+			"Failed to list target directory contents! Reason: " + result,
 			"COMMAND",
 			LogType::LOG_ERROR,
 			2);
@@ -444,7 +494,7 @@ void Command_List(const vector<string>& params)
 
 	ostringstream oss{};
 
-	oss << "\nListing all paths at '" << currentDir << "':\n";
+	oss << "\nListing all paths at '" << targetDir << "':\n";
 	if (content.empty()) oss << "  - (empty)";
 	else
 	{
@@ -452,7 +502,7 @@ void Command_List(const vector<string>& params)
 		{
 			oss << "  - ";
 
-			path rel = content[i].lexically_relative(currentDir);
+			path rel = content[i].lexically_relative(targetDir);
 			oss << rel.string();
 
 			if (is_directory(content[i])) oss << "/";
@@ -466,6 +516,27 @@ void Command_List(const vector<string>& params)
 
 void Command_Go(const vector<string>& params)
 {
+	if (params.size() == 1)
+	{
+		Log::Print(
+			"Command 'go' got no arguments! You must pass one path.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+	if (params.size() > 2)
+	{
+		Log::Print(
+			"Command 'go' only allows one argument! You must pass one path.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+
 	string& currentDir = Core::GetCurrentDir();
 
 	if (currentDir.empty()) currentDir = current_path().string();
@@ -508,6 +579,27 @@ void Command_Go(const vector<string>& params)
 
 void Command_CreateDir(const vector<string>& params)
 {
+	if (params.size() == 1)
+	{
+		Log::Print(
+			"Command 'cd' got no arguments! You must pass one path.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+	if (params.size() > 2)
+	{
+		Log::Print(
+			"Command 'cd' only allows one argument! You must pass one path.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+
 	path partialPath = TryTargetPath(
 		params[1],
 		"create directory at");
@@ -561,6 +653,27 @@ void Command_CreateDir(const vector<string>& params)
 
 void Command_Delete(const vector<string>& params)
 {
+	if (params.size() == 1)
+	{
+		Log::Print(
+			"Command 'dl' got no arguments! You must pass one path.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+	if (params.size() > 2)
+	{
+		Log::Print(
+			"Command 'dl' only allows one argument! You must pass one path.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+
 	path partialPath = TryTargetPath(
 		params[1],
 		"delete");
@@ -614,6 +727,37 @@ void Command_Delete(const vector<string>& params)
 
 void Command_Rename(const vector<string>& params)
 {
+	if (params.size() == 1)
+	{
+		Log::Print(
+			"Command 'rn' got no arguments! You must pass origin path and target name.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+	if (params.size() == 2)
+	{
+		Log::Print(
+			"Command 'rn' requires two arguments! You must pass origin path and target name.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+	if (params.size() > 3)
+	{
+		Log::Print(
+			"Command 'rn' only allows two arguments! You must pass origin path and target name.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+
 	path partialPath = TryTargetPath(
 		params[1],
 		"rename");
@@ -669,6 +813,37 @@ void Command_Rename(const vector<string>& params)
 
 void Command_Move(const vector<string>& params)
 {
+	if (params.size() == 1)
+	{
+		Log::Print(
+			"Command 'mv' got no arguments! You must pass origin path and target path.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+	if (params.size() == 2)
+	{
+		Log::Print(
+			"Command 'mv' requires two arguments! You must pass origin path and target path.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+	if (params.size() > 3)
+	{
+		Log::Print(
+			"Command 'mv' only allows two arguments! You must pass origin path and target path.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+
 	string& currentDir = Core::GetCurrentDir();
 	if (currentDir.empty()) currentDir = current_path().string();
 
@@ -728,6 +903,37 @@ void Command_Move(const vector<string>& params)
 
 void Command_Copy(const vector<string>& params)
 {
+	if (params.size() == 1)
+	{
+		Log::Print(
+			"Command 'cp' got no arguments! You must pass origin path and target path.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+	if (params.size() == 2)
+	{
+		Log::Print(
+			"Command 'cp' requires two arguments! You must pass origin path and target path.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+	if (params.size() > 3)
+	{
+		Log::Print(
+			"Command 'cp' only allows two arguments! You must pass origin path and target path.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+
 	string& currentDir = Core::GetCurrentDir();
 	if (currentDir.empty()) currentDir = current_path().string();
 
@@ -798,6 +1004,37 @@ void Command_Copy(const vector<string>& params)
 
 void Command_ForceCopy(const vector<string>& params)
 {
+	if (params.size() == 1)
+	{
+		Log::Print(
+			"Command 'fc' got no arguments! You must pass origin path and target path.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+	if (params.size() == 2)
+	{
+		Log::Print(
+			"Command 'fc' requires two arguments! You must pass origin path and target path.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+	if (params.size() > 3)
+	{
+		Log::Print(
+			"Command 'fc' only allows two arguments! You must pass origin path and target path.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+
 	string& currentDir = Core::GetCurrentDir();
 	if (currentDir.empty()) currentDir = current_path().string();
 
@@ -857,6 +1094,17 @@ void Command_ForceCopy(const vector<string>& params)
 
 void Command_Clear(const vector<string>& params)
 {
+	if (params.size() > 1)
+	{
+		Log::Print(
+			"Command 'c' does not allow any arguments!",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
+
+		return;
+	}
+
 #ifdef _WIN32
 	system("cls");
 #else
@@ -866,9 +1114,19 @@ void Command_Clear(const vector<string>& params)
 
 void Command_Exit(const vector<string>& params)
 {
-	if (params.size() == 1
-		&& params[0] == "e")
+	if (params[0] == "e")
 	{
+		if (params.size() > 1)
+		{
+			Log::Print(
+				"Command 'e' does not allow any arguments!",
+				"PARSE",
+				LogType::LOG_ERROR,
+				2);
+
+			return;
+		}
+
 		ostringstream out{};
 		out << "\n==========================================================================================\n";
 		Log::Print(out.str());
@@ -876,6 +1134,19 @@ void Command_Exit(const vector<string>& params)
 		Log::Print("Press 'Enter' to exit...");
 		cin.get();
 	}
+	else if (params[0] == "q")
+	{
+		if (params.size() > 1)
+		{
+			Log::Print(
+				"Command 'q' does not allow any arguments!",
+				"PARSE",
+				LogType::LOG_ERROR,
+				2);
 
-	quick_exit(0);
+			return;
+		}
+
+		quick_exit(0);
+	}
 }

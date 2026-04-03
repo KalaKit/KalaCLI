@@ -10,7 +10,6 @@
 #include <functional>
 
 #include "core_utils.hpp"
-#include "math_utils.hpp"
 
 namespace KalaCLI
 {
@@ -30,10 +29,6 @@ namespace KalaCLI
 
 		//The description of this command that is listed when the built-in 'info' command is called
 		string description{};
-
-		//The count of how many params total this command must contain.
-		//Range should be 1-255
-		u8 paramCount{};
 
 		//Reference to the target function you want this command to call,
 		//must contain vector<string> as its only parameter to be able to receive user-passed parameters
