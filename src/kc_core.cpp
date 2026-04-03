@@ -36,6 +36,7 @@ using KalaHeaders::KalaFile::CopyPath;
 using KalaCLI::Core;
 using KalaCLI::Command;
 using KalaCLI::CommandManager;
+using KalaCLI::COMMAND_PREFIX;
 
 #ifdef __linux__
 using std::raise;
@@ -141,6 +142,7 @@ namespace KalaCLI
 			//always exits if a command was passed, otherwise goes into cli mode
 			Command_Exit({"q"});
 		}
+		else Log::Print("Type '" + string(COMMAND_PREFIX) + "help' to list all commands.");
 
 		string line{};
 		while (true)
@@ -148,9 +150,6 @@ namespace KalaCLI
 			Log::Print("\nEnter command:");
 
 			getline(cin, line);
-
-			//uncomment if you want each new command to clean the console
-			//system("cls");
 
 			if (line.empty()) continue;
 
@@ -358,9 +357,10 @@ void Command_Help(const vector<string>& params)
 
 	ostringstream result{};
 
-	result << "\nType '--info' with a command name as the"
-		<< " second parameter to get more info about that command.\n"
-		<< "Use the ampersand (&) symbol to stack commands, for example '--list & --quit' to list and quick exit.\n\n"
+	result << "\nType '" + string(COMMAND_PREFIX) + "info' with a command name as"
+		<< " its argument to get more info about that command.\n"
+		<< "Use the ampersand (&) symbol to stack commands, for example '" 
+		+ string(COMMAND_PREFIX) + "list & " + string(COMMAND_PREFIX) + "q' to list and quick exit.\n\n"
 		<< "Listing all commands:\n"
 		<< "  run\n";
 	for (const auto& c : CommandManager::GetCommands())
@@ -395,16 +395,10 @@ void Command_Info(const vector<string>& params)
 	}
 
 	string command = params[1];
-
-	ostringstream result{};
-
-	result << "\n";
 	
 	if (command == "run")
 	{
-		result << "Runs selected user command with any amount of parameters.";
-		
-		Log::Print(result.str());
+		Log::Print("Runs selected user command with any amount of parameters.");
 		
 		return;
 	}
@@ -431,10 +425,7 @@ void Command_Info(const vector<string>& params)
 		return;
 	}
 
-	result << "primary variant: " << cmd.primaryParam << "\n";
-	result << "description: " << cmd.description << "\n";
-
-	Log::Print(result.str());
+	Log::Print(cmd.description);
 }
 
 void Command_Where(const vector<string>& params)
@@ -1114,19 +1105,22 @@ void Command_Clear(const vector<string>& params)
 
 void Command_Exit(const vector<string>& params)
 {
-	if (params[0] == "e")
+	if (params.empty()) quick_exit(0);
+
+	if (params.size() > 1)
 	{
-		if (params.size() > 1)
-		{
-			Log::Print(
-				"Command 'e' does not allow any arguments!",
-				"PARSE",
-				LogType::LOG_ERROR,
-				2);
+		Log::Print(
+			"Command 'e' and command 'q' does not allow any arguments!",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
 
-			return;
-		}
+		return;
+	}
 
+	if (params[0] == "q") quick_exit(0);
+	else if (params[0] == "e")
+	{
 		ostringstream out{};
 		out << "\n==========================================================================================\n";
 		Log::Print(out.str());
@@ -1134,19 +1128,12 @@ void Command_Exit(const vector<string>& params)
 		Log::Print("Press 'Enter' to exit...");
 		cin.get();
 	}
-	else if (params[0] == "q")
+	else
 	{
-		if (params.size() > 1)
-		{
-			Log::Print(
-				"Command 'q' does not allow any arguments!",
-				"PARSE",
-				LogType::LOG_ERROR,
-				2);
-
-			return;
-		}
-
-		quick_exit(0);
+		Log::Print(
+			"Unknown exit type '" + params[0] + "' was passed! Only 'q' and 'e' are allowed.",
+			"PARSE",
+			LogType::LOG_ERROR,
+			2);
 	}
 }

@@ -88,7 +88,7 @@ namespace KalaCLI
 		if (foundCommand.primaryParam.empty())
 		{
 			Log::Print(
-				"Failed to run command '" + cleanedParams[0] + "' because it does not exist.",
+				"Failed to run command '" + cleanedParams[0] + "' because it does not exist! Type '" + string(COMMAND_PREFIX) + "help' to list all commands.",
 				"PARSE",
 				LogType::LOG_ERROR,
 				2);
@@ -132,7 +132,7 @@ namespace KalaCLI
 			return false;
 		}
 
-		//skip existing primary variants
+		//skip existing primary parameters
 		for (const auto& c : commands)
 		{
 			if (newValue.primaryParam == c.primaryParam)
