@@ -2,6 +2,8 @@
 
 This is a cli executable template for C++ 20 on Windows and Linux. 
 
+This project relies on several [external dependencies](https://github.com/greeenlaser/external-shared), they are not shipped inside this project, please make sure you have that repository cloned into a folder inside the same parent directory as this project folder before compiling this project from source.
+
 ## Projects that use this template
 
 [KalaMake](https://github.com/kalakit/kalamake)
