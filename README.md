@@ -7,9 +7,6 @@ This project relies on several [external dependencies](https://github.com/greeen
 ## Projects that use this template
 
 [KalaMake](https://github.com/kalakit/kalamake)
-[KalaMove](https://github.com/kalakit/kalamove)
-[KalaFont](https://github.com/kalakit/kalafont)
-[KalaModel](https://github.com/kalakit/kalamodel)
 
 ---
 
