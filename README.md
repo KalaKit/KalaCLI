@@ -8,6 +8,51 @@ This project relies on several [external dependencies](https://github.com/greeen
 
 [KalaMake](https://github.com/kalakit/kalamake)
 
+## Minimal compile example
+
+To compile KalaCLI on Windows without Kalamake:
+```
+//create the root build dir
+mkdir build
+
+//create the target binary dir
+mkdir build\release-windows
+
+//create the object dir
+mkdir build\release-windows\obj
+
+//go to the target binary dir
+cd build\release-windows
+
+//compile cpp files
+for /r "..\..\src" %f in (*.cpp) do clang++ -DLIB_STATIC -std=c++20 -c "%f" -I"..\..\include" -I"..\..\..\external-shared\KalaHeaders\include" -o "obj\%~nf.obj"
+
+//link into library
+llvm-lib /OUT:kalacli.lib "obj\*.obj"
+```
+And on Linux:
+```
+//create the root build dir
+mkdir build
+
+//create the target binary dir
+mkdir build\release-linux
+
+//create the object dir
+mkdir build\release-linux\obj
+
+//go to the target binary dir
+cd build\release-linux
+
+//compile cpp files
+for f in ../../src/**/*.cpp
+    clang++ -DLIB_STATIC -std=c++20 -c "$f" -I"../../include" -I"../../../external-shared/KalaHeaders/include" -o obj/(basename $f .cpp).o
+end
+
+//link into library
+ar rcs libkalacli.a obj/*.o
+```
+
 ---
 
 ## Links

@@ -27,7 +27,7 @@ case "$1" in
         OUT_NAME=KalaCLI-Windows
 
         LIB_NAME=kalacli
-        LIB_EXT=
+        LIB_EXT=lib
         LIB_ORIGIN=build/release-windows
         ;;
     *)
