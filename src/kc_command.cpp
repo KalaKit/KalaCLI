@@ -41,7 +41,13 @@ namespace KalaCLI
 
 		vector<string> cleanedParams = params;
 
-		if (!COMMAND_PREFIX.empty()) cleanedParams[0] = RemoveFromString(cleanedParams[0], COMMAND_PREFIX.data());
+		if (!COMMAND_PREFIX.empty())
+		{
+			string _ = RemoveFromString(
+				cleanedParams[0],
+				COMMAND_PREFIX.data(),
+				cleanedParams[0]);
+		}
 		
 		if (cleanedParams[0] == "run")
 		{

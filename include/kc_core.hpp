@@ -15,9 +15,10 @@ namespace KalaCLI
 	using std::string;
 	using std::function;
 
-	class LIB_API Core
+	class LIB_API KalaCLICore
 	{
 	public:
+		KNODISCARD
 		static string& GetCurrentDir();
 
 		static void Run(
@@ -27,6 +28,7 @@ namespace KalaCLI
 
 		//Use this when you absolutely need a hard crash at this very moment.
 		//Aborts and doesn't clean up data.
+		KNORETURN
 		static void ForceClose(
 			const string& title,
 			const string& reason);

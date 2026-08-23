@@ -20,7 +20,7 @@ namespace KalaCLI
 
 	//The prefix that must be in front of the primary parameter,
 	//for example '--help', leave empty if you dont want a required prefix
-	constexpr string_view COMMAND_PREFIX = "--";
+	static constexpr string_view COMMAND_PREFIX = "--";
 
 	struct LIB_API Command
 	{
@@ -38,12 +38,15 @@ namespace KalaCLI
 	class LIB_API CommandManager
 	{
 	public:
+		KNODISCARD
 		static vector<Command>& GetCommands();
 
 		//Parse given strings from end user
+		KNODISCARD
 		static bool ParseCommand(const vector<string>& params);
 
 		//Add new command to commands list
+		KNODISCARD
 		static bool AddCommand(Command newValue);
 	};
 }

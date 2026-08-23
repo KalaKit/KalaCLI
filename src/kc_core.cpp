@@ -33,7 +33,7 @@ using KalaHeaders::KalaFile::RenamePath;
 using KalaHeaders::KalaFile::MovePath;
 using KalaHeaders::KalaFile::CopyPath;
 
-using KalaCLI::Core;
+using KalaCLI::KalaCLICore;
 using KalaCLI::Command;
 using KalaCLI::CommandManager;
 using KalaCLI::COMMAND_PREFIX;
@@ -97,7 +97,7 @@ static path TryTargetPath(
 	string targetType = isFull ? "full" : "partial";
 	path finalTarget = isFull
 		? path(target)
-		: path(Core::GetCurrentDir()) / target;
+		: path(KalaCLICore::GetCurrentDir()) / target;
 
 	try
 	{
@@ -121,9 +121,9 @@ namespace KalaCLI
 {
 	static string currentDir{};
 
-	string& Core::GetCurrentDir() { return currentDir; }
+	string& KalaCLICore::GetCurrentDir() { return currentDir; }
 
-	void Core::Run(
+	void KalaCLICore::Run(
 		int argc,
 		char* argv[],
 		function<void()> AddExternalCommands)
@@ -137,7 +137,15 @@ namespace KalaCLI
 			vector<string> params{};
 			for (int i = 1; i < argc; ++i) params.emplace_back(argv[i]);
 
-			if (!params.empty()) CommandManager::ParseCommand(params);
+			if (!params.empty())
+			{
+				if (!CommandManager::ParseCommand(params))
+				{
+					KalaCLICore::ForceClose(
+						"KalaCLI core error",
+						"Failed to parse params '" + string(*argv) + "'!");
+				}
+			}
 
 			//always exits if a command was passed, otherwise goes into cli mode
 			Command_Exit({"q"});
@@ -156,13 +164,16 @@ namespace KalaCLI
 			vector<string> splitCommands{};
 			if (line.find("&") != string::npos)
 			{
-				splitCommands = SplitString(line, "&");
+				vector<string> sl{};
+				string _ = SplitString(line, "&", sl);
+				splitCommands = sl;
 			}
 			else splitCommands.push_back(line);
 			
 			for (const auto& c : splitCommands)
 			{
-				string cleanedLine = TrimString(c);
+				string cleanedLine{};
+				string _ = TrimString(c, cleanedLine);
 				
 				vector<string> splitValue{};
 				char token{};
@@ -171,21 +182,35 @@ namespace KalaCLI
 				
 				if (token != 0)
 				{
-					splitValue = TokenizeString(
+					vector<string> ts{};
+					string _ = TokenizeString(
 						cleanedLine,
 						token,
-						" ");
+						" ",
+						ts);
+
+					splitValue = ts;
 				}
-				else splitValue = SplitString(cleanedLine, " ");
+				else
+				{
+					vector<string> ss{};
+					string _ = SplitString(cleanedLine, " ", ss);
+					splitValue = ss;
+				}
 
 				if (splitValue.size() == 0) continue;
 
-				CommandManager::ParseCommand(splitValue);
+				if (!CommandManager::ParseCommand(splitValue))
+				{
+					KalaCLICore::ForceClose(
+						"KalaCLI core error",
+						"Failed to parse '" + cleanedLine + "'!");
+				}
 			}
 		}
 	}
 
-	void Core::ForceClose(
+	void KalaCLICore::ForceClose(
 		const string& target,
 		const string& reason)
 	{
@@ -323,23 +348,23 @@ void AddBuiltInCommands()
 		.targetFunction = Command_Exit
 	};
 
-	CommandManager::AddCommand(cmd_help);
-	CommandManager::AddCommand(cmd_info);
+	bool _ = CommandManager::AddCommand(cmd_help);
+	_ = CommandManager::AddCommand(cmd_info);
 
-	CommandManager::AddCommand(cmd_where);
-	CommandManager::AddCommand(cmd_list);
-	CommandManager::AddCommand(cmd_go);
+	_ = CommandManager::AddCommand(cmd_where);
+	_ = CommandManager::AddCommand(cmd_list);
+	_ = CommandManager::AddCommand(cmd_go);
 
-	CommandManager::AddCommand(cmd_createdir);
-	CommandManager::AddCommand(cmd_delete);
-	CommandManager::AddCommand(cmd_rename);
-	CommandManager::AddCommand(cmd_move);
-	CommandManager::AddCommand(cmd_copy);
-	CommandManager::AddCommand(cmd_forcecopy);
+	_ = CommandManager::AddCommand(cmd_createdir);
+	_ = CommandManager::AddCommand(cmd_delete);
+	_ = CommandManager::AddCommand(cmd_rename);
+	_ = CommandManager::AddCommand(cmd_move);
+	_ = CommandManager::AddCommand(cmd_copy);
+	_ = CommandManager::AddCommand(cmd_forcecopy);
 
-	CommandManager::AddCommand(cmd_clear);
-	CommandManager::AddCommand(cmd_exit);
-	CommandManager::AddCommand(cmd_qe);
+	_ = CommandManager::AddCommand(cmd_clear);
+	_ = CommandManager::AddCommand(cmd_exit);
+	_ = CommandManager::AddCommand(cmd_qe);
 }
 
 void Command_Help(const vector<string>& params)
@@ -441,7 +466,7 @@ void Command_Where(const vector<string>& params)
 		return;
 	}
 
-	string& currentDir = Core::GetCurrentDir();
+	string& currentDir = KalaCLICore::GetCurrentDir();
 
 	if (currentDir.empty()) currentDir = current_path().string();
 	Log::Print("\nCurrently at: " + currentDir);
@@ -461,7 +486,7 @@ void Command_List(const vector<string>& params)
 	}
 
 	string targetDir = params.size() == 1 
-		? Core::GetCurrentDir()
+		? KalaCLICore::GetCurrentDir()
 		: params[1];
 
 	if (targetDir.empty()) targetDir = params.size() == 1 
@@ -528,7 +553,7 @@ void Command_Go(const vector<string>& params)
 		return;
 	}
 
-	string& currentDir = Core::GetCurrentDir();
+	string& currentDir = KalaCLICore::GetCurrentDir();
 
 	if (currentDir.empty()) currentDir = current_path().string();
 	path correctTarget = weakly_canonical(path(currentDir) / params[1]);
@@ -618,7 +643,7 @@ void Command_CreateDir(const vector<string>& params)
 		return;
 	}
 
-	string& currentDir = Core::GetCurrentDir();
+	string& currentDir = KalaCLICore::GetCurrentDir();
 	if (currentDir.empty()) currentDir = current_path().string();
 
 	path fullPath = TryTargetPath(
@@ -692,7 +717,7 @@ void Command_Delete(const vector<string>& params)
 		return;
 	}
 
-	string& currentDir = Core::GetCurrentDir();
+	string& currentDir = KalaCLICore::GetCurrentDir();
 	if (currentDir.empty()) currentDir = current_path().string();
 
 	path fullPath = TryTargetPath(
@@ -778,7 +803,7 @@ void Command_Rename(const vector<string>& params)
 		return;
 	}
 
-	string& currentDir = Core::GetCurrentDir();
+	string& currentDir = KalaCLICore::GetCurrentDir();
 	if (currentDir.empty()) currentDir = current_path().string();
 	
 	path fullPath = TryTargetPath(
@@ -835,7 +860,7 @@ void Command_Move(const vector<string>& params)
 		return;
 	}
 
-	string& currentDir = Core::GetCurrentDir();
+	string& currentDir = KalaCLICore::GetCurrentDir();
 	if (currentDir.empty()) currentDir = current_path().string();
 
 	path partialOrigin = TryTargetPath(
@@ -925,7 +950,7 @@ void Command_Copy(const vector<string>& params)
 		return;
 	}
 
-	string& currentDir = Core::GetCurrentDir();
+	string& currentDir = KalaCLICore::GetCurrentDir();
 	if (currentDir.empty()) currentDir = current_path().string();
 
 	path partialOrigin = TryTargetPath(
@@ -1026,7 +1051,7 @@ void Command_ForceCopy(const vector<string>& params)
 		return;
 	}
 
-	string& currentDir = Core::GetCurrentDir();
+	string& currentDir = KalaCLICore::GetCurrentDir();
 	if (currentDir.empty()) currentDir = current_path().string();
 
 	path partialOrigin = TryTargetPath(
