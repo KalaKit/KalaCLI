@@ -1,6 +1,7 @@
 # 1.1.0
 
 - registry overhaul
+- simplified build and dependency system
 
 # 1.0.0
 
