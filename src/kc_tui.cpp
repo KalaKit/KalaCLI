@@ -36,6 +36,8 @@ using std::string;
 using std::vector;
 using std::array;
 using std::min;
+using std::max;
+using std::clamp;
 using std::cout;
 using std::atexit;
 using std::chrono::steady_clock;
@@ -56,6 +58,12 @@ static bool isEnabled{};
 static atomic<bool> canConsoleWriteToPage{};
 
 static string pageTitle{};
+
+static bool inPageMode{};
+static u32 innerW{};
+static u32 innerPageH{};
+static u32 pageTop{}; //absolute wrapped line that is at row 0 of innerPageH
+static u32 pageSelection{}; //absolute selected line (0 - totalWrapped - 1)
 
 static array<string, MAX_PAGE_LINES> pageContent{};
 static u32 pageCount{}; //valid entries
@@ -462,8 +470,11 @@ namespace KalaCLI
         static string nextFrameText{};
         if (!nextFrameText.empty())
         {
-            cout << nextFrameText << "\n";
-            cout.flush();
+            //cout << nextFrameText << "\n";
+            //cout.flush();
+
+            std::system(nextFrameText.c_str());
+
             sleep_for(milliseconds(5)); //wait for thread to push to pageContent
             nextFrameText.clear();
         }
@@ -482,14 +493,61 @@ namespace KalaCLI
         dup2(real_err, STDERR_FILENO);
 #endif
 
+        auto count_wrapped_lines = [&](const string& src) -> int
+            {
+                if (src.empty()) return 1;
+                int c = 0;
+                size_t start = 0;
+                while (start < src.size())
+                {
+                    size_t remaining = src.size() - start;
+                    if (remaining <= innerW)
+                    { 
+                        c++;
+                        break;
+                    }
+
+                    size_t searchLimit = start + innerW;
+                    size_t spacePos = src.rfind(' ', searchLimit);
+                    if (spacePos != string::npos
+                        && spacePos > start
+                        && spacePos < searchLimit)
+                    {
+                        c++;
+                        start = spacePos + 1;
+                        while (start < src.size()
+                            && src[start] == ' ')
+                        {
+                            ++start;
+                        }
+                    }
+                    else
+                    {
+                        //the ... ends the src
+                        if ((start + innerW) < src.size()
+                            && innerW >= 3)
+                        {
+                            c++;
+                            break;
+                        }
+                        else
+                        {
+                            c++;
+                            start += innerW;
+                        }
+                    }
+                }
+                return c;
+            };
+
         auto draw_page_box = [&]() -> u32
             {
                 u32 w = scast<u32>(totalSize.x);
                 u32 h = scast<u32>(totalSize.y);
 
                 u32 pageH = h - 3; //dont draw in bottom three rows
-                u32 innerW = w - 2;
-                u32 innerH = pageH - 2;
+                innerW = w - 2;
+                innerPageH = pageH - 2;
 
                 string horizontalBar{};
                 horizontalBar.reserve(innerW * 3);
@@ -598,92 +656,130 @@ namespace KalaCLI
 
                 auto draw_middle = [&]() -> void
                     {
+                        int total{};
+                        {
+                            lock_guard<mutex> lock(externalMutex);
+                            for (u32 i = 0; i < pageCount; ++i)
+                            {
+                                total += count_wrapped_lines(pageContent[(pageHead + i) % MAX_PAGE_LINES]);
+                            }
+                        }
+
+                        if (!inPageMode)
+                        {
+                            pageTop = max(0, total - (int)innerPageH);
+                            pageSelection = max(0, total - 1);
+                        }
+                        else
+                        {
+                            pageTop = clamp(pageTop, 0u, scast<u32>(max(0, total - (int)innerPageH)));
+                            pageSelection = clamp(pageSelection, 0u, scast<u32>(max(0, total - 1)));
+                            if (pageSelection < pageTop) pageTop = pageSelection;
+                            if (pageSelection >= pageTop + (int)innerPageH) pageTop = pageSelection - innerPageH + 1;
+                        }
+
                         vector<string> wrapped{};
-                        wrapped.reserve(innerH);
+                        wrapped.reserve(innerPageH);
 
                         {
                             lock_guard<mutex> lock(externalMutex);
-                            for (u32 i = 0; i < pageCount && wrapped.size() < innerH; ++i)
+                            u32 absIdx{}; //absolute wrapped index
+                            for (u32 i = 0; i < pageCount && wrapped.size() < innerPageH; ++i)
                             {
                                 const string& src = pageContent[(pageHead + i) % MAX_PAGE_LINES];
-
                                 if (src.empty())
                                 {
-                                    wrapped.emplace_back("");
+                                    if (absIdx >= pageTop
+                                        && absIdx < pageTop + innerPageH)
+                                    {
+                                        wrapped.push_back("");    
+                                    }
+                                    absIdx++;
                                     continue;
                                 }
 
                                 size_t start{};
                                 while (start < src.size()
-                                    && wrapped.size() < innerH)
+                                    && wrapped.size() < innerPageH)
                                 {
+                                    string out{};
                                     size_t remaining = src.size() - start;
                                     if (remaining <= innerW)
                                     {
-                                        wrapped.push_back(src.substr(start));
-                                        break;
-                                    }
-
-                                    //try to wrap on last space within innerW
-                                    size_t searchLimit = start + innerW;
-                                    size_t spacePos = src.rfind(' ', searchLimit);
-
-                                    //rfind may find space before start - invalid
-                                    if (spacePos != string::npos
-                                        && spacePos > start
-                                        && spacePos < searchLimit)
-                                    {
-                                        wrapped.push_back(src.substr(start, spacePos - start));
-                                        start = spacePos + 1;
-                                        while (start < src.size()
-                                            && src[start] == ' ')
-                                        {
-                                            //skip extra spaces
-                                            ++start;
-                                        }
+                                        out = src.substr(start);
+                                        start = src.size();
                                     }
                                     else
                                     {
-                                        //long word - hard chop, show ... to indicate more
-                                        string chunk = src.substr(start, innerW);
-                                        bool hasMore = (start + innerW) < src.size();
-                                        if (hasMore
-                                            && innerW >= 3)
+                                        size_t searchLimit = start + innerW;
+                                        size_t spacePos = src.rfind(' ', searchLimit);
+                                        if (spacePos != string::npos
+                                            && spacePos > start
+                                            && spacePos < searchLimit)
                                         {
-                                            chunk = chunk.substr(0, innerW - 3) + "...";
-                                            wrapped.push_back(chunk);
-                                            //word ends here, don't continue to next row
-                                            break;
+                                            out = src.substr(start, spacePos - start);
+                                            start = spacePos + 1;
+                                            while (start < src.size()
+                                                && src[start] == ' ')
+                                            {
+                                                ++start;
+                                            }
                                         }
                                         else
                                         {
-                                            wrapped.push_back(chunk);
-                                            start += innerW;
+                                            string chunk = src.substr(start, innerW);
+                                            bool hasMore = (start + innerW) < src.size();
+                                            if (hasMore
+                                                && innerW >= 3)
+                                            {
+                                                out = chunk.substr(0, innerW - 3) + "...";
+                                                start = src.size();
+                                            }
+                                            else
+                                            {
+                                                out = chunk;
+                                                start += innerW;
+                                            }
                                         }
                                     }
+
+                                    if (absIdx >= pageTop
+                                        && absIdx < pageTop + innerPageH)
+                                    {
+                                        wrapped.push_back(out);
+                                    }
+                                    absIdx++;
+                                    if (absIdx >= pageTop + innerPageH
+                                        && wrapped.size() >= innerPageH)
+                                    {
+                                        break;
+                                    }
                                 }
+
+                                if (absIdx >= pageTop + innerPageH) break;
                             }
                         }
 
-                        for (u32 i = 0; i < innerH; ++i)
+                        for (u32 i = 0; i < innerPageH; ++i)
                         {
-                            string line{};
-                            if (i < wrapped.size())
+                            string line = (i < wrapped.size())
+                                ? wrapped[i]
+                                : "";
+
+                            if (line.size() < innerW) line += string(innerW - line.size(), ' ');
+                            else if (line.size() > innerW)
                             {
-                                line = wrapped[i];
-
-                                //if line is shorter than innerW pad it, if it's exactly innerW keep it
-                                if (line.size() < innerW) line += string(innerW - line.size(), ' ');
-                                else if (line.size() > innerW)
-                                {
-                                    //safely chop with ...
-                                    if (innerW >= 3) line = line.substr(0, innerW - 3) + "...";
-                                    else line = line.substr(0, innerW);
-                                }
+                                if (innerW >= 3) line = line.substr(0, innerW - 3) + "...";
+                                else line = line.substr(0, innerW);
                             }
-                            else line = spaces;
 
-                            cout << "\n│" << line << "│";
+                            u32 absRow = pageTop + i;
+                            if (inPageMode
+                                && absRow == pageSelection)
+                            {
+                                cout << "\n│\x1b[7m" << line << "\x1b[0m│";
+                            }
+                            else cout << "\n│" << line << "│";
                         }
                     };
                     
@@ -701,9 +797,6 @@ namespace KalaCLI
 
         auto draw_input_box = [&]() -> void
             {
-                u32 w = scast<u32>(totalSize.x);
-                u32 innerW = w - 2;
-
                 string horizontalBar{};
                 horizontalBar.reserve(innerW * 3);
 
@@ -742,8 +835,135 @@ namespace KalaCLI
             {
                 u32 innerW = scast<u32>(totalSize.x) - 2;
 
+                ALLOWED_KEY key = scast<ALLOWED_KEY>(c);
+
+                if (key == ALLOWED_KEY::KEY_TAB)
+                {
+                    inPageMode = !inPageMode;
+                    return;
+                }
+
+                //
+                // PAGE READ MODE
+                //
+
+                if (inPageMode)
+                {
+                    int total{};
+                    {
+                        lock_guard<mutex> lock(externalMutex);
+                        for (u32 i = 0; i < pageCount; ++i)
+                        {
+                            total += count_wrapped_lines(pageContent[(pageHead + i) % MAX_PAGE_LINES]);
+                        }
+                    }
+
+                    if (key == ALLOWED_KEY::KEY_ARROW_UP
+                        && pageSelection > 0)
+                    {
+                        pageSelection--;
+                        if (pageSelection < pageTop) pageTop = pageSelection;
+                    }
+                    else if (key == ALLOWED_KEY::KEY_ARROW_DOWN)
+                    {
+                        if ((int)pageSelection < total - 1)
+                        {
+                            pageSelection++;
+                            if (pageSelection >= pageTop + innerPageH) pageTop++;
+                        }
+                    }
+                    else if (key == ALLOWED_KEY::KEY_CARRIAGE_RETURN
+                        || key == ALLOWED_KEY::KEY_LINE_FEED)
+                    {
+                        string toCopy{};
+                        {
+                            lock_guard<mutex> lock(externalMutex);
+                            u32 absIdx{}; //absolute wrapped index
+                            for (u32 i = 0; i < pageCount; ++i)
+                            {
+                                const string& src = pageContent[(pageHead + i) % MAX_PAGE_LINES];
+                                if (src.empty())
+                                {
+                                    if (absIdx == pageSelection)
+                                    {
+                                        toCopy = "";
+                                        break;    
+                                    }
+                                    absIdx++;
+                                    continue;
+                                }
+
+                                size_t start{};
+                                while (start < src.size())
+                                {
+                                    string out{};
+                                    size_t remaining = src.size() - start;
+                                    if (remaining <= innerW)
+                                    {
+                                        out = src.substr(start);
+                                        start = src.size();
+                                    }
+                                    else
+                                    {
+                                        size_t searchLimit = start + innerW;
+                                        size_t spacePos = src.rfind(' ', searchLimit);
+                                        if (spacePos != string::npos
+                                            && spacePos > start
+                                            && spacePos < searchLimit)
+                                        {
+                                            out = src.substr(start, spacePos - start);
+                                            start = spacePos + 1;
+                                            while (start < src.size()
+                                                && src[start] == ' ')
+                                            {
+                                                ++start;
+                                            }
+                                        }
+                                        else
+                                        {
+                                            string chunk = src.substr(start, innerW);
+                                            bool hasMore = (start + innerW) < src.size();
+                                            if (hasMore
+                                                && innerW >= 3)
+                                            {
+                                                out = chunk.substr(0, innerW - 3) + "...";
+                                                start = src.size();
+                                            }
+                                            else
+                                            {
+                                                out = chunk;
+                                                start += innerW;
+                                            }
+                                        }
+                                    }
+
+                                    if (absIdx == pageSelection)
+                                    {
+                                        toCopy = out;
+                                        break;
+                                    }
+                                    absIdx++;
+                                }
+
+                                if (absIdx >= pageSelection) break;
+                            }
+                        }
+
+                        typedText = toCopy;
+                        cursorPos = typedText.size();
+                        inPageMode = false;
+                    }
+
+                    return;
+                }
+
+                //
+                // INPUT MODE 
+                //
+
                 //printable character
-                if (c >= 32
+                if (!inPageMode
+                    && c >= 32
                     && c <= 126)
                 {
                     if (typedText.size() < innerW)
@@ -757,8 +977,6 @@ namespace KalaCLI
 
                     return;
                 }
-
-                ALLOWED_KEY key = scast<ALLOWED_KEY>(c);
 
                 if (key == ALLOWED_KEY::KEY_ARROW_LEFT
                     && cursorPos > 0)
@@ -774,7 +992,11 @@ namespace KalaCLI
                 {
                     if (typedTextCount == 0) return;
 
-                    if (typedHistoryPos == -1) typedHistoryPos = (int)typedTextCount - 1;
+                    if (typedText.empty()
+                        || typedHistoryPos == -1)
+                    {
+                        typedHistoryPos = (int)typedTextCount - 1;
+                    }
                     else
                     {
                         --typedHistoryPos;
@@ -789,7 +1011,11 @@ namespace KalaCLI
                 {
                     if (typedTextCount == 0) return;
 
-                    if (typedHistoryPos == -1) typedHistoryPos = 0;
+                    if (typedText.empty()
+                        || typedHistoryPos == -1)
+                    {
+                        typedHistoryPos = 0;
+                    }
                     else
                     {
                         ++typedHistoryPos;
