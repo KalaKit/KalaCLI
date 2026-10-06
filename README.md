@@ -30,7 +30,7 @@ mkdir build\release-windows\obj
 cd build\release-windows
 
 //compile cpp files
-for /r "..\..\src" %f in (*.cpp) do clang++ -DLIB_STATIC -std=c++20 -c "%f" -I"..\..\include" -I"..\..\..\external-shared\KalaHeaders\include" -o "obj\%~nf.obj"
+for /r "..\..\src" %f in (*.cpp) do clang++ -DLIB_STATIC -std=c++20 -c "%f" -I"..\..\include" -I"..\..\external\kalaheaders\include" -o "obj\%~nf.obj"
 
 //link into library
 llvm-lib /OUT:kalacli.lib "obj\*.obj"
@@ -51,7 +51,7 @@ cd build\release-linux
 
 //compile cpp files
 for f in ../../src/**/*.cpp
-    clang++ -DLIB_STATIC -std=c++20 -c "$f" -I"../../include" -I"../../../external-shared/KalaHeaders/include" -o obj/(basename $f .cpp).o
+    clang++ -DLIB_STATIC -std=c++20 -c "$f" -I"../../include" -I"../../external/KalaHeaders/include" -o obj/(basename $f .cpp).o
 end
 
 //link into library
