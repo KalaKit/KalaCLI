@@ -101,9 +101,6 @@ static const string cmdH = string(TUI_COMMAND_PREFIX) + "h";
 static const string cmdClear = string(TUI_COMMAND_PREFIX) + "clear";
 static const string cmdC = string(TUI_COMMAND_PREFIX) + "c";
 
-static const string cmdGetCLICommands = string(TUI_COMMAND_PREFIX) + "getclicommands";
-static const string cmdGCC = string(TUI_COMMAND_PREFIX) + "gcc";
-
 static const string cmdCommand = string(TUI_COMMAND_PREFIX) + "command";
 static const string cmdCmd = string(TUI_COMMAND_PREFIX) + "cmd";
 
@@ -115,6 +112,9 @@ static const string cmdDC = string(TUI_COMMAND_PREFIX) + "dc";
 
 static const string cmdSetPageTitle = string(TUI_COMMAND_PREFIX) + "setpagetitle";
 static const string cmdSPT = string(TUI_COMMAND_PREFIX) + "spt";
+
+static const string cmdExit = string(TUI_COMMAND_PREFIX) + "exit";
+static const string cmdE = string(TUI_COMMAND_PREFIX) + "e";
 
 static vector<Command> addedCommands{};
 static function<void(string&)> prefixlessAction{};
@@ -504,26 +504,7 @@ namespace KalaCLI
 
     void TUI::SendCommand(string_view command)
     {
-        if (command.starts_with(CLI_COMMAND_PREFIX))
-        {
-            SetConsoleWritesToPageState(true);
-
-            vector<string> split{};
-            string err = SplitString(command, " ", split);
-            if (!err.empty())
-            {
-                KalaCLICore::ForceClose(
-                    "KalaCLI TUI error",
-                    "Failed to send command '" + string(command) + "'! Reason: " + err);
-            }
-
-            AppendToPage(command);
-            if (!CLI::ParseCommand(split))
-            {
-                AppendToPage("ERROR: Failed to run CLI command!");
-            }
-        }
-        else if (command.starts_with(TUI_COMMAND_PREFIX))
+        if (command.starts_with(TUI_COMMAND_PREFIX))
         {
             vector<string> split{};
             string err = SplitString(command, " ", split);
@@ -595,21 +576,6 @@ namespace KalaCLI
                     pageCount = 0;
                     pageTop = 0;
                     pageSelection = 0;
-                }
-            }
-            else if (cmd == cmdGetCLICommands
-                || cmd == cmdGCC)
-            {
-                if (split.size() > 1)
-                {
-                    AppendToPage("ERROR: 'getclicommands' command does not accept any arguments!");
-                }
-                else
-                {
-                    for (const Command& c : CLI::GetCommands())
-                    {
-                        AppendToPage(c.primaryParam + ": " + c.description);
-                    }
                 }
             }
             else if (cmd == cmdCommand
@@ -711,6 +677,15 @@ namespace KalaCLI
                     SetPageTitle(cmdContent);
                 }
             }
+            else if (cmd == cmdExit
+                || cmd == cmdE)
+            {
+                if (split.size() > 1)
+                {
+                    AppendToPage("ERROR: 'exit' command does not accept any arguments!");
+                }
+                else exit(0);
+            }
             else
             {
                 auto call_user_added_command = [&]() -> bool
@@ -753,8 +728,6 @@ namespace KalaCLI
             || command.primaryParam == cmdH
             || command.primaryParam == cmdClear
             || command.primaryParam == cmdC
-            || command.primaryParam == cmdGetCLICommands
-            || command.primaryParam == cmdGCC
             || command.primaryParam == cmdCommand
             || command.primaryParam == cmdCmd
             || command.primaryParam == cmdEnableConsole
@@ -762,7 +735,9 @@ namespace KalaCLI
             || command.primaryParam == cmdDisableConsole
             || command.primaryParam == cmdDC
             || command.primaryParam == cmdSetPageTitle
-            || command.primaryParam == cmdSPT)
+            || command.primaryParam == cmdSPT
+            || command.primaryParam == cmdExit
+            || command.primaryParam == cmdE)
         {
             AppendToPage(
                 "ERROR: Failed to add command because its name '" 

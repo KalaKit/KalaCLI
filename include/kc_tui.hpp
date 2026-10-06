@@ -50,17 +50,16 @@ namespace KalaCLI
         static void AppendToPage(string_view line);
 
         //Alternative to manually typing a command,
-        //commands that start with CLI_COMMAND_PREFIX are sent to kc_command.hpp ParseCommand,
-        //commands that start with TUI_COMMAND_PREFIX are sent to kc_tui.hpp internal command parser,
-        //writing a message without a command prefix writes it to the tui like a normal message
-        //TUI commands:
-        //  /help, /h: lists all available commands and what they do
-        //  /clear, /c: clears all tui page messages
-        //  /getclicommands, /gcc: lists all available cli commands and what they do
-        //  /command command, /cmd command: sends selected message as command to console
-        //  /enableconsole, /ec: enables console-based updates
-        //  /disableconsole, /dc: disables console-based updates
-        //  /setpagetitle title, /spt title: updates page title
+        //commands that start with TUI_COMMAND_PREFIX are sent to tui internal command parser,
+        //writing a message without a command prefix writes it to the tui like a normal message.
+        //Built in TUI commands:
+        //- /help, /h: lists all available commands and what they do,
+        //- /clear, /c: clears all tui page messages,
+        //- /command command, /cmd command: sends selected message as command to console,
+        //- /enableconsole, /ec: enables console-based updates,
+        //- /disableconsole, /dc: disables console-based updates,
+        //- /setpagetitle title, /spt title: updates page title,
+        //- /exit, /e: close the tui
         static void SendCommand(string_view command);
 
         //Add a new command
