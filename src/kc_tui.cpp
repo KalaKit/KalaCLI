@@ -39,6 +39,8 @@ using KalaCLI::MAX_PAGE_LINES;
 using KalaCLI::MAX_TYPED_TEXT_HISTORY;
 using KalaCLI::KalaCLICore;
 using KalaCLI::TUI_COMMAND_PREFIX;
+using KalaCLI::Command;
+using KalaCLI::TUI;
 
 using std::string;
 using std::string_view;
@@ -57,6 +59,7 @@ using std::mutex;
 using std::thread;
 using std::lock_guard;
 using std::atomic;
+using std::function;
 
 static constexpr u32 PAGE_TITLE_MAX_WIDTH = 50;
 static constexpr u32 WIDTH_MIN = 40;
@@ -113,6 +116,9 @@ static const string cmdDC = string(TUI_COMMAND_PREFIX) + "dc";
 static const string cmdSetPageTitle = string(TUI_COMMAND_PREFIX) + "setpagetitle";
 static const string cmdSPT = string(TUI_COMMAND_PREFIX) + "spt";
 
+static vector<Command> addedCommands{};
+static function<void(string&)> prefixlessAction{};
+
 enum class ALLOWED_KEY : u32
 {
     KEY_BACKSPACE       = 8,
@@ -129,21 +135,6 @@ enum class ALLOWED_KEY : u32
 #ifdef KLIN_ANY
 static struct termios orig_term{};
 #endif
-
-static void AppendToPage(string_view line)
-{
-    lock_guard<mutex> lock(externalMutex);
-    if (pageCount < MAX_PAGE_LINES)
-    {
-        pageContent[(pageHead + pageCount) % MAX_PAGE_LINES] = line;
-        ++pageCount;
-    }
-    else
-    {
-        pageContent[pageHead] = line;
-        pageHead = (pageHead + 1) % MAX_PAGE_LINES;
-    }
-}
 
 static void StartCapture()
 {
@@ -194,7 +185,7 @@ static void StartCapture()
 
                     if (!canConsoleWriteToPage.load()) continue;
 
-                    AppendToPage(std::move(line));
+                    TUI::AppendToPage(std::move(line));
                 }
 
                 if (!carry.empty()
@@ -206,7 +197,7 @@ static void StartCapture()
                     {
                         line.pop_back();
                     }
-                    AppendToPage(std::move(line));
+                    TUI::AppendToPage(std::move(line));
                     carry.clear();
                 }
             }
@@ -256,7 +247,7 @@ static void StartCapture()
 
                     if (!canConsoleWriteToPage.load()) continue;
 
-                    AppendToPage(std::move(line));
+                    TUI::AppendToPage(std::move(line));
                 }
 
                 if (!carry.empty()
@@ -268,7 +259,7 @@ static void StartCapture()
                     {
                         line.pop_back();
                     }
-                    AppendToPage(std::move(line));
+                    TUI::AppendToPage(std::move(line));
                     carry.clear();
                 }
             }
@@ -496,6 +487,20 @@ namespace KalaCLI
             pageContent[i] = content[i];
         }
     }
+    void TUI::AppendToPage(string_view line)
+    {
+        lock_guard<mutex> lock(externalMutex);
+        if (pageCount < MAX_PAGE_LINES)
+        {
+            pageContent[(pageHead + pageCount) % MAX_PAGE_LINES] = line;
+            ++pageCount;
+        }
+        else
+        {
+            pageContent[pageHead] = line;
+            pageHead = (pageHead + 1) % MAX_PAGE_LINES;
+        }
+    }
 
     void TUI::SendCommand(string_view command)
     {
@@ -547,12 +552,31 @@ namespace KalaCLI
                 }
                 else
                 {
-                    AppendToPage("/help, /h: lists all available commands and what they do");
-                    AppendToPage("/clear, /c: clears all tui page messages");
-                    AppendToPage("/command command, /cmd command: sends selected message as command to console");
-                    AppendToPage("/enableconsole, /ec: enables console-based updates");
-                    AppendToPage("/disableconsole, /dc: disables console-based updates");
-                    AppendToPage("/setpagetitle title, /spt title: updates page title");
+                    AppendToPage(
+                        string(TUI_COMMAND_PREFIX) + "help, " + string(TUI_COMMAND_PREFIX) 
+                        + "h: lists all available commands and what they do");
+                    AppendToPage(
+                        string(TUI_COMMAND_PREFIX) + "clear, " + string(TUI_COMMAND_PREFIX) 
+                        + "c: clears all tui page messages");
+                    AppendToPage(
+                        string(TUI_COMMAND_PREFIX) + "command command, " + string(TUI_COMMAND_PREFIX) 
+                        + "cmd command: sends selected message as command to console");
+                    AppendToPage(
+                        string(TUI_COMMAND_PREFIX) + "enableconsole, " + string(TUI_COMMAND_PREFIX) 
+                        + "ec: enables console-based updates");
+                    AppendToPage(
+                        string(TUI_COMMAND_PREFIX) + "disableconsole, " + string(TUI_COMMAND_PREFIX) 
+                        + "dc: disables console-based updates");
+                    AppendToPage(
+                        string(TUI_COMMAND_PREFIX) + "setpagetitle title, " + string(TUI_COMMAND_PREFIX) 
+                        + "spt title: updates page title");
+
+                    for (const Command& thisCmd : addedCommands)
+                    {
+                        if (!thisCmd.targetFunction) continue; //ignore empty functions
+
+                        AppendToPage(string(TUI_COMMAND_PREFIX) + thisCmd.primaryParam + ": " + thisCmd.description);
+                    }
                 }
             }
             else if (cmd == cmdClear
@@ -689,14 +713,90 @@ namespace KalaCLI
             }
             else
             {
-                AppendToPage(
-                    "ERROR: Command '" + cmd + "' was not found! "
-                    "Type '/help' or '/h' to list all available commands.");
+                auto call_user_added_command = [&]() -> bool
+                    {
+                        for (const Command& thisCmd : addedCommands)
+                        {
+                            if (string(TUI_COMMAND_PREFIX) + thisCmd.primaryParam == cmd)
+                            {
+                                vector<string> splitCopy = split;
+                                splitCopy.erase(splitCopy.begin());
+
+                                thisCmd.targetFunction(splitCopy);
+                                return true;
+                            }
+                        }
+
+                        return false;
+                    };
+
+                if (!call_user_added_command())
+                {
+                    AppendToPage(
+                        "ERROR: Command '" + cmd + "' was not found! "
+                        "Type '/help' or '/h' to list all available commands.");
+                }
             }
         }
-        else AppendToPage(nextFrameText);
+        else
+        {
+            if (!prefixlessAction) AppendToPage(nextFrameText);
+            else prefixlessAction(nextFrameText);
+        }
 
         nextFrameText.clear();
+    }
+
+    void TUI::AddCommand(Command&& command)
+    {
+        if (command.primaryParam == cmdHelp
+            || command.primaryParam == cmdH
+            || command.primaryParam == cmdClear
+            || command.primaryParam == cmdC
+            || command.primaryParam == cmdGetCLICommands
+            || command.primaryParam == cmdGCC
+            || command.primaryParam == cmdCommand
+            || command.primaryParam == cmdCmd
+            || command.primaryParam == cmdEnableConsole
+            || command.primaryParam == cmdEC
+            || command.primaryParam == cmdDisableConsole
+            || command.primaryParam == cmdDC
+            || command.primaryParam == cmdSetPageTitle
+            || command.primaryParam == cmdSPT)
+        {
+            AppendToPage(
+                "ERROR: Failed to add command because its name '" 
+                + string(command.primaryParam) + "' is used by a KalaCLI TUI command!");
+
+            return;
+        }
+
+        for (Command& cmd : addedCommands)
+        {
+            if (command.primaryParam == cmd.primaryParam)
+            {
+                AppendToPage("WARNING: Overwrote command function for existing command '" + string(command.primaryParam) + "'!");
+                cmd.targetFunction = command.targetFunction;
+                return;
+            }
+        }
+
+        //you can clear target function for existing commands,
+        //but you cannot pass empty function to newly added commands
+        if (!command.targetFunction)
+        {
+            AppendToPage("ERROR: Command '" + string(command.primaryParam) + "' has no target function!");
+            return;
+        }
+
+        AppendToPage("Added new command '" + string(command.primaryParam) + "'!");
+        addedCommands.push_back(std::move(command));
+    }
+
+    void TUI::SetPrefixlessTargetAction(function<void(string&)> action)
+    {
+        AppendToPage("Updated prefixless target action.");
+        prefixlessAction = action;
     }
 
     void TUI::UpdateDisplayedContent()
