@@ -24,6 +24,7 @@
 #include <mutex>
 #include <thread>
 #include <atomic>
+#include <sstream>
 
 #include "math_utils.hpp"
 #include "string_utils.hpp"
@@ -51,6 +52,7 @@ using std::max;
 using std::clamp;
 using std::cout;
 using std::cerr;
+using std::flush;
 using std::atexit;
 using std::chrono::steady_clock;
 using std::this_thread::sleep_for;
@@ -60,12 +62,19 @@ using std::thread;
 using std::lock_guard;
 using std::atomic;
 using std::function;
+using std::ostringstream;
 
 static constexpr u32 PAGE_TITLE_MAX_WIDTH = 50;
 static constexpr u32 WIDTH_MIN = 40;
 static constexpr u32 HEIGHT_MIN = 15;
 
 static bool startedUpdate{};
+
+static string lastFrame{};
+static bool hasReservedLastFrame{};
+
+static ostringstream frame{};
+static bool hasReservedFrame{};
 
 static atomic<bool> canConsoleWriteToPage{};
 
@@ -132,7 +141,12 @@ enum class ALLOWED_KEY : u32
     KEY_ARROW_LEFT      = 1003
 };
 
-#ifdef KLIN_ANY
+#ifdef KWIN_ANY
+static DWORD g_origInMode{};
+static DWORD g_origOutMode{};
+static UINT g_origOutCP{};
+static UINT g_origInCP{};
+#else
 static struct termios orig_term{};
 #endif
 
@@ -312,21 +326,35 @@ static u32 GetPushedKey()
 
     int ch = (u32)_getch();
 
-    //system key
-    if (ch == 0
-        || ch == 224)
+    //esc sequence
+    if (ch == 27)
     {
-        int ch2 = _getch();
+        if (!_kbhit()) return 27; //real ESC
+        if (_getch() != '[') return 0;
+        if (!_kbhit()) return 0;
 
-        if (ch2 == 72) return scast<u32>(ALLOWED_KEY::KEY_ARROW_UP);
-        if (ch2 == 80) return scast<u32>(ALLOWED_KEY::KEY_ARROW_DOWN);
-        if (ch2 == 77) return scast<u32>(ALLOWED_KEY::KEY_ARROW_RIGHT);
-        if (ch2 == 75) return scast<u32>(ALLOWED_KEY::KEY_ARROW_LEFT);
+        int ch3 = _getch();
+        if (ch3 == 'A') return scast<u32>(ALLOWED_KEY::KEY_ARROW_UP);
+        if (ch3 == 'B') return scast<u32>(ALLOWED_KEY::KEY_ARROW_DOWN);
+        if (ch3 == 'C') return scast<u32>(ALLOWED_KEY::KEY_ARROW_RIGHT);
+        if (ch3 == 'D') return scast<u32>(ALLOWED_KEY::KEY_ARROW_LEFT);
 
         return 0;
     }
 
-    return scast<u32>(ch);
+    if (ch > 127) return 0;
+    //allow every printable + allowed key
+    if ((ch >= 32
+        && ch <= 126)
+        || ch == '\n'
+        || ch == '\r'
+        || ch == 8
+        || ch == 127
+        || ch == 9)
+    {
+        return scast<u32>(ch);
+    }
+    return 0;
 #else
     fd_set fds{};
 
@@ -417,18 +445,25 @@ static u32 GetPushedKey()
 
 namespace KalaCLI
 {
-#if defined(KLIN_ANY)
     int _ = atexit([]
-    { 
-        if (startedUpdate)
         {
-            tcsetattr(
-                STDIN_FILENO,
-                TCSANOW,
-                &orig_term);
-        }
-    });
+            if (startedUpdate)
+            {
+#if defined(KWIN_ANY)
+                HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
+                HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+                SetConsoleMode(hIn, g_origInMode);
+                SetConsoleMode(hOut, g_origOutMode);
+                SetConsoleOutputCP(g_origOutCP);
+                SetConsoleCP(g_origInCP);
+#else
+                tcsetattr(
+                    STDIN_FILENO,
+                    TCSANOW,
+                    &orig_term);
 #endif
+            }
+        });
 
     void TUI::Run()
     {
@@ -778,9 +813,37 @@ namespace KalaCLI
     {
         if (!startedUpdate)
         {
+#if defined(KWIN_ANY)
+            setlocale(LC_ALL, ".UTF8");
+
+            HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
+            HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+
+            g_origOutCP = GetConsoleOutputCP();
+            g_origInCP = GetConsoleCP();
+            GetConsoleMode(hIn, &g_origInMode);
+            GetConsoleMode(hOut, &g_origOutMode);
+
+            SetConsoleOutputCP(CP_UTF8);
+            SetConsoleCP(CP_UTF8);
+
+            //input: no line buffering, no echo, window events, vt input
+            DWORD newIn = g_origInMode;
+            newIn &= ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
+            newIn |= ENABLE_VIRTUAL_TERMINAL_INPUT;
+            SetConsoleMode(hIn, newIn);
+
+            //output: enable vt sequences like ESC[24;2H
+            DWORD newOut = g_origOutMode;
+            newOut |= ENABLE_VIRTUAL_TERMINAL_PROCESSING
+                | ENABLE_PROCESSED_OUTPUT
+                | ENABLE_WRAP_AT_EOL_OUTPUT;
+            //disable for better unicode borders
+            newOut &= ~ENABLE_LVB_GRID_WORLDWIDE;
+            SetConsoleMode(hOut, newOut);
+#else
             setlocale(LC_ALL, "");
 
-#if defined(KLIN_ANY)
             tcgetattr(STDIN_FILENO, &orig_term);
             struct termios raw = orig_term;
             raw.c_lflag &= ~(ICANON | ECHO); //no line buffering, no kernel echo
@@ -790,7 +853,6 @@ namespace KalaCLI
 #endif
 
             StartCapture();
-
             startedUpdate = true;
         }
 
@@ -798,7 +860,11 @@ namespace KalaCLI
             {
 #if defined(KWIN_ANY)
                 CONSOLE_SCREEN_BUFFER_INFO csbi{};
-                if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
+
+                HANDLE hReal = (HANDLE)_get_osfhandle(real_out);
+                if (hReal != INVALID_HANDLE_VALUE
+                    && hReal != NULL
+                    && GetConsoleScreenBufferInfo(hReal, &csbi))
                 {
                     return vec2
                     {
@@ -806,7 +872,33 @@ namespace KalaCLI
                         scast<f32>(csbi.srWindow.Bottom - csbi.srWindow.Top + 1)
                     };
                 }
-                else return vec2{ 80.0f, 25.0f };
+
+                //use conout if stdout was piped
+                HANDLE hCon = CreateFileW(
+                    L"CONOUT$",
+                    GENERIC_READ
+                    | GENERIC_WRITE,
+                    FILE_SHARE_READ
+                    | FILE_SHARE_WRITE,
+                    NULL,
+                    OPEN_EXISTING,
+                    0,
+                    NULL);
+                if (hCon != INVALID_HANDLE_VALUE)
+                {
+                    if (GetConsoleScreenBufferInfo(hCon, &csbi))
+                    {
+                        CloseHandle(hCon);
+                        return vec2
+                        {
+                            scast<f32>(csbi.srWindow.Right - csbi.srWindow.Left + 1),
+                            scast<f32>(csbi.srWindow.Bottom - csbi.srWindow.Top + 1)
+                        };
+                    }
+                    CloseHandle(hCon);
+                }
+
+                return vec2{ 80.0f, 25.0f };
 #else
                 struct winsize ws{};
                 if (ioctl(real_out, TIOCGWINSZ, &ws) == 0
@@ -903,6 +995,12 @@ namespace KalaCLI
                 return c;
             };
 
+        if (!hasReservedFrame)
+        {
+            frame.str().reserve(65536);
+            hasReservedFrame = true;
+        }
+
         auto draw_page_box = [&]() -> u32
             {
                 u32 w = scast<u32>(totalSize.x);
@@ -919,16 +1017,16 @@ namespace KalaCLI
                 string spaces(innerW, ' ');
 
                 //clear
-                cout << "\x1b[2J\x1b[H";
+                frame << "\x1b[2J\x1b[H";
                 //disable auto-wrap
-                cout << "\x1b[?7l";
+                frame << "\x1b[?7l";
 
                 auto draw_top_border = [&]() -> void
                     {
                         if (pageTitle.empty()        //no content to draw
                             || pageTitle.size() < 3) //content is too short
                         {
-                            cout << "┌" << horizontalBar << "┐";
+                            frame << "┌" << horizontalBar << "┐";
 
                             return;
                         }
@@ -1012,7 +1110,7 @@ namespace KalaCLI
                         for (u32 i = 0; i < left; ++i) lbar += "─";
                         for (u32 i = 0; i < right; ++i) rbar += "─";
 
-                        cout << "┌" << lbar << display << rbar << "┐";
+                        frame << "┌" << lbar << display << rbar << "┐";
                     };
 
                 draw_top_border();
@@ -1140,18 +1238,16 @@ namespace KalaCLI
                             if (inPageMode
                                 && absRow == pageSelection)
                             {
-                                cout << "\n│\x1b[7m" << line << "\x1b[0m│";
+                                frame << "\n│\x1b[7m" << line << "\x1b[0m│";
                             }
-                            else cout << "\n│" << line << "│";
+                            else frame << "\n│" << line << "│";
                         }
                     };
                     
                 draw_middle();
 
                 //bottom border
-                cout << "\n└" << horizontalBar << "┘";
-
-                cout.flush();
+                frame << "\n└" << horizontalBar << "┘";
 
                 return pageH + 1;
             };
@@ -1170,28 +1266,26 @@ namespace KalaCLI
                     : 0;
 
                 //snap cursor to where page box stopped + wrap still disabled
-                cout << "\x1b[" << inputStartRow << ";1H";
+                frame << "\x1b[" << inputStartRow << ";1H";
 
                 //top border
-                cout << "┌" << horizontalBar << "┐\n";
+                frame << "┌" << horizontalBar << "┐\n";
                 //middle
-                cout << "│" << typedText << string(pad, ' ') << "│\n";
+                frame << "│" << typedText << string(pad, ' ') << "│\n";
                 //bottom border
-                cout << "└" << horizontalBar << "┘";
+                frame << "└" << horizontalBar << "┘";
                 
                 //snap cursor to input pos start
-                cout << "\x1b[" << (inputStartRow + 1) << ";" << 2 << "H";
+                frame << "\x1b[" << (inputStartRow + 1) << ";" << 2 << "H";
 
                 //paste whole input text string + clear remainder
-                cout << typedText << string(pad, ' ');
+                frame << typedText << string(pad, ' ');
 
                 //move cursor to cursorPos
-                cout << "\x1b[" << (inputStartRow + 1) << ";" << (2 + cursorPos) << "H";
+                frame << "\x1b[" << (inputStartRow + 1) << ";" << (2 + cursorPos) << "H";
 
                 //re-enable auto-wrap
-                cout << "\x1b[?7h";
-
-                cout.flush();
+                frame << "\x1b[?7h";
             };
 
         auto handle_input_char = [&](u32 c) -> void
@@ -1430,6 +1524,22 @@ namespace KalaCLI
         if (u32 c = GetPushedKey()) handle_input_char(c);
 
         draw_input_box();
+
+        if (!hasReservedLastFrame)
+        {
+            lastFrame.reserve(65536);
+            hasReservedLastFrame = true;
+        }
+
+        string thisFrame = std::move(frame).str();
+
+        if (lastFrame != thisFrame)
+        {
+            cout << thisFrame << flush;
+            lastFrame = std::move(thisFrame);
+        }
+        frame.str("");
+        frame.clear();
 
         StopDrawCapture();
     }
