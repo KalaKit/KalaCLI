@@ -9,7 +9,6 @@
 #include <windows.h>
 #include <conio.h>
 #include <io.h>
-#include <fcntl.h>
 #else
 #include <sys/ioctl.h>
 #include <sys/select.h>
@@ -18,6 +17,7 @@
 #include <termios.h>
 #endif
 
+#include <fcntl.h>
 #include <clocale>
 #include <iostream>
 #include <chrono>
@@ -26,19 +26,29 @@
 #include <atomic>
 
 #include "math_utils.hpp"
+#include "string_utils.hpp"
+
+#include "kc_cli.hpp"
+#include "kc_core.hpp"
 
 using KalaHeaders::KalaMath::vec2;
 
+using KalaHeaders::KalaString::SplitString;
+
 using KalaCLI::MAX_PAGE_LINES;
 using KalaCLI::MAX_TYPED_TEXT_HISTORY;
+using KalaCLI::KalaCLICore;
+using KalaCLI::TUI_COMMAND_PREFIX;
 
 using std::string;
+using std::string_view;
 using std::vector;
 using std::array;
 using std::min;
 using std::max;
 using std::clamp;
 using std::cout;
+using std::cerr;
 using std::atexit;
 using std::chrono::steady_clock;
 using std::this_thread::sleep_for;
@@ -54,7 +64,6 @@ static constexpr u32 HEIGHT_MIN = 15;
 
 static bool startedUpdate{};
 
-static bool isEnabled{};
 static atomic<bool> canConsoleWriteToPage{};
 
 static string pageTitle{};
@@ -70,6 +79,7 @@ static u32 pageCount{}; //valid entries
 static u32 pageHead{}; //oldest entry index
 
 static string typedText{};
+static string nextFrameText{};
 static array<string, MAX_TYPED_TEXT_HISTORY> typedTextHistory{};
 static u32 typedTextCount{}; //valid entries
 static u32 typedTextHead{}; //oldest entry index
@@ -81,6 +91,27 @@ static int real_out = -1;
 static int real_err = -1;
 static int cap_pipe[2] = { -1, -1 };
 static mutex externalMutex{};
+
+static const string cmdHelp = string(TUI_COMMAND_PREFIX) + "help";
+static const string cmdH = string(TUI_COMMAND_PREFIX) + "h";
+
+static const string cmdClear = string(TUI_COMMAND_PREFIX) + "clear";
+static const string cmdC = string(TUI_COMMAND_PREFIX) + "c";
+
+static const string cmdGetCLICommands = string(TUI_COMMAND_PREFIX) + "getclicommands";
+static const string cmdGCC = string(TUI_COMMAND_PREFIX) + "gcc";
+
+static const string cmdCommand = string(TUI_COMMAND_PREFIX) + "command";
+static const string cmdCmd = string(TUI_COMMAND_PREFIX) + "cmd";
+
+static const string cmdEnableConsole = string(TUI_COMMAND_PREFIX) + "enableconsole";
+static const string cmdEC = string(TUI_COMMAND_PREFIX) + "ec";
+
+static const string cmdDisableConsole = string(TUI_COMMAND_PREFIX) + "disableconsole";
+static const string cmdDC = string(TUI_COMMAND_PREFIX) + "dc";
+
+static const string cmdSetPageTitle = string(TUI_COMMAND_PREFIX) + "setpagetitle";
+static const string cmdSPT = string(TUI_COMMAND_PREFIX) + "spt";
 
 enum class ALLOWED_KEY : u32
 {
@@ -99,6 +130,21 @@ enum class ALLOWED_KEY : u32
 static struct termios orig_term{};
 #endif
 
+static void AppendToPage(string_view line)
+{
+    lock_guard<mutex> lock(externalMutex);
+    if (pageCount < MAX_PAGE_LINES)
+    {
+        pageContent[(pageHead + pageCount) % MAX_PAGE_LINES] = line;
+        ++pageCount;
+    }
+    else
+    {
+        pageContent[pageHead] = line;
+        pageHead = (pageHead + 1) % MAX_PAGE_LINES;
+    }
+}
+
 static void StartCapture()
 {
     if (real_out != -1) return;
@@ -108,7 +154,7 @@ static void StartCapture()
     real_err = _dup(_fileno(stderr));
     _pipe(
         cap_pipe,
-        4096,
+        65536,
         _O_BINARY
         | _O_NOINHERIT);
 
@@ -116,6 +162,11 @@ static void StartCapture()
     _dup2(cap_pipe[1], _fileno(stderr));
     SetStdHandle(STD_OUTPUT_HANDLE, (HANDLE)_get_osfhandle(cap_pipe[1]));
     SetStdHandle(STD_ERROR_HANDLE, (HANDLE)_get_osfhandle(cap_pipe[1]));
+
+    setvbuf(stdout, nullptr, _IONBF, 0);
+    setvbuf(stderr, nullptr, _IONBF, 0);
+    cout.setf(std::ios::unitbuf);
+    cerr.setf(std::ios::unitbuf);
 
     thread([]
         {
@@ -125,11 +176,7 @@ static void StartCapture()
             while (true)
             {
                 int n = _read(cap_pipe[0], buf, sizeof(buf) -1);
-                if (n <= 0)
-                {
-                    sleep_for(milliseconds(5));
-                    continue;
-                }
+                if (n <= 0) continue;
 
                 buf[n] = '\0';
                 carry += buf;
@@ -137,22 +184,30 @@ static void StartCapture()
 
                 while ((pos = carry.find('\n')) != string::npos)
                 {
-                    if (!canConsoleWriteToPage.load()) break;
-
                     string line = carry.substr(0, pos);
                     carry.erase(0, pos + 1);
+                    if (!line.empty()
+                        && line.back() == '\r')
+                    {
+                        line.pop_back();
+                    }
 
-                    lock_guard<mutex> lock(externalMutex);
-                    if (pageCount < MAX_PAGE_LINES)
+                    if (!canConsoleWriteToPage.load()) continue;
+
+                    AppendToPage(std::move(line));
+                }
+
+                if (!carry.empty()
+                    && canConsoleWriteToPage.load())
+                {
+                    string line = carry;
+                    if (!line.empty()
+                        && line.back() == '\r')
                     {
-                        pageContent[(pageHead + pageCount) % MAX_PAGE_LINES] = std::move(line);
-                        ++pageCount;
+                        line.pop_back();
                     }
-                    else
-                    {
-                        pageContent[pageHead] = std::move(line);
-                        pageHead = (pageHead + 1) % MAX_PAGE_LINES;
-                    }
+                    AppendToPage(std::move(line));
+                    carry.clear();
                 }
             }
         }).detach();
@@ -161,8 +216,19 @@ static void StartCapture()
     real_err = dup(STDERR_FILENO);
     pipe(cap_pipe);
 
+    //don't let child keep read end
+    fcntl(cap_pipe[0], F_SETFD, FD_CLOEXEC);
+    fcntl(cap_pipe[1], F_SETFD, FD_CLOEXEC);
+    //make pipe big so big commands dont fill it and freeze
+    fcntl(cap_pipe[1], F_SETPIPE_SZ, 1024 * 1024);
+
     dup2(cap_pipe[1], STDOUT_FILENO);
     dup2(cap_pipe[1], STDERR_FILENO);
+
+    setvbuf(stdout, nullptr, _IONBF, 0);
+    setvbuf(stderr, nullptr, _IONBF, 0);
+    cout.setf(std::ios::unitbuf);
+    cerr.setf(std::ios::unitbuf);
 
     thread([]
         {
@@ -172,11 +238,7 @@ static void StartCapture()
             while (true)
             {
                 ssize_t n = read(cap_pipe[0], buf, sizeof(buf) -1);
-                if (n <= 0)
-                {
-                    sleep_for(milliseconds(5));
-                    continue;
-                }
+                if (n <= 0) continue;
 
                 buf[n] = '\0';
                 carry += buf;
@@ -184,26 +246,72 @@ static void StartCapture()
 
                 while ((pos = carry.find('\n')) != string::npos)
                 {
-                    if (!canConsoleWriteToPage.load()) break;
-
                     string line = carry.substr(0, pos);
                     carry.erase(0, pos + 1);
+                    if (!line.empty()
+                        && line.back() == '\r')
+                    {
+                        line.pop_back();
+                    }
 
-                    lock_guard<mutex> lock(externalMutex);
-                    if (pageCount < MAX_PAGE_LINES)
+                    if (!canConsoleWriteToPage.load()) continue;
+
+                    AppendToPage(std::move(line));
+                }
+
+                if (!carry.empty()
+                    && canConsoleWriteToPage.load())
+                {
+                    string line = carry;
+                    if (!line.empty()
+                        && line.back() == '\r')
                     {
-                        pageContent[(pageHead + pageCount) % MAX_PAGE_LINES] = std::move(line);
-                        ++pageCount;
+                        line.pop_back();
                     }
-                    else
-                    {
-                        pageContent[pageHead] = std::move(line);
-                        pageHead = (pageHead + 1) % MAX_PAGE_LINES;
-                    }
+                    AppendToPage(std::move(line));
+                    carry.clear();
                 }
             }
         }).detach();
 #endif
+}
+
+static void StartDrawCapture(bool fullStart)
+{
+    if (fullStart)
+    {
+        fflush(stdout);
+        fflush(stderr);
+        cout.flush();
+    }
+
+#if defined(KWIN_ANY)
+    _dup2(real_out, _fileno(stdout));
+    _dup2(real_err, _fileno(stderr));
+    SetStdHandle(STD_OUTPUT_HANDLE, (HANDLE)_get_osfhandle(real_out));
+    SetStdHandle(STD_ERROR_HANDLE, (HANDLE)_get_osfhandle(real_err));
+#else
+    dup2(real_out, STDOUT_FILENO);
+    dup2(real_err, STDERR_FILENO);
+#endif
+}
+
+static void StopDrawCapture()
+{
+    #if defined(KWIN_ANY)
+        _dup2(cap_pipe[1], _fileno(stdout));
+        _dup2(cap_pipe[1], _fileno(stderr));
+        SetStdHandle(STD_OUTPUT_HANDLE, (HANDLE)_get_osfhandle(cap_pipe[1]));
+        SetStdHandle(STD_ERROR_HANDLE, (HANDLE)_get_osfhandle(cap_pipe[1]));
+#else
+        dup2(cap_pipe[1], STDOUT_FILENO);
+        dup2(cap_pipe[1], STDERR_FILENO);
+#endif
+
+    setvbuf(stdout, nullptr, _IONBF, 0);
+    setvbuf(stderr, nullptr, _IONBF, 0);
+    cout.setf(std::ios::unitbuf);
+    cerr.setf(std::ios::unitbuf);
 }
 
 static u32 GetPushedKey()
@@ -318,8 +426,6 @@ static u32 GetPushedKey()
 
 namespace KalaCLI
 {
-    
-
 #if defined(KLIN_ANY)
     int _ = atexit([]
     { 
@@ -333,24 +439,47 @@ namespace KalaCLI
     });
 #endif
 
-    bool TUI::IsEnabled() { return isEnabled; }
-    void TUI::SetEnabledState(bool state) { isEnabled = state; }
+    void TUI::Run()
+    {
+        if (CLI_COMMAND_PREFIX == TUI_COMMAND_PREFIX)
+        {
+            KalaCLICore::ForceClose(
+                "KalaCLI TUI error",
+                "Failed to run because cli and tui command prefixes are indentical!");
+        }
+
+        while(true)
+        {
+            TUI::UpdateDisplayedContent();
+
+            sleep_for(milliseconds(16));
+        }
+    }
 
     bool TUI::CanConsoleWriteToPage() { return canConsoleWriteToPage.load(); }
     void TUI::SetConsoleWritesToPageState(bool state) { canConsoleWriteToPage.store(state); }
 
     void TUI::SetPageTitle(string_view title)
     {
-        if (title.size() < 3) return;
+        if (title.size() < 3)
+        {
+            AppendToPage("ERROR: Failed to update page title because it was too short!");
+            return;
+        }
 
         pageTitle = title;
     }
 
     void TUI::SetPageContent(const vector<string>& content)
-    { 
-        if (content.size() > MAX_PAGE_LINES
-            || canConsoleWriteToPage.load())
+    {
+        if (content.size() > MAX_PAGE_LINES)
         {
+            AppendToPage("ERROR: Failed to update page content because it was too big!");
+            return;
+        }
+        if (canConsoleWriteToPage.load())
+        {
+            AppendToPage("ERROR: Failed to update page content because console writing is enabled!");
             return;
         }
 
@@ -359,6 +488,8 @@ namespace KalaCLI
         pageContent = {};
         pageHead = 0;
         pageCount = scast<u32>(content.size());
+        pageTop = 0;
+        pageSelection = 0;
 
         for (u32 i = 0; i < pageCount; ++i)
         {
@@ -368,7 +499,204 @@ namespace KalaCLI
 
     void TUI::SendCommand(string_view command)
     {
+        if (command.starts_with(CLI_COMMAND_PREFIX))
+        {
+            SetConsoleWritesToPageState(true);
 
+            vector<string> split{};
+            string err = SplitString(command, " ", split);
+            if (!err.empty())
+            {
+                KalaCLICore::ForceClose(
+                    "KalaCLI TUI error",
+                    "Failed to send command '" + string(command) + "'! Reason: " + err);
+            }
+
+            AppendToPage(command);
+            if (!CLI::ParseCommand(split))
+            {
+                AppendToPage("ERROR: Failed to run CLI command!");
+            }
+        }
+        else if (command.starts_with(TUI_COMMAND_PREFIX))
+        {
+            vector<string> split{};
+            string err = SplitString(command, " ", split);
+            if (!err.empty())
+            {
+                KalaCLICore::ForceClose(
+                    "KalaCLI TUI error",
+                    "Failed to send command '" + string(command) + "'! Reason: " + err);
+            }
+
+            string cmd = split[0];
+            string cmdContent{};
+
+            size_t pos = command.find(' ');
+            if (pos != string_view::npos)
+            {
+                cmdContent = string(command.substr(pos + 1));
+            }
+
+            if (cmd == cmdHelp
+                || cmd == cmdH)
+            {
+                if (split.size() > 1)
+                {
+                    AppendToPage("ERROR: 'help' command does not accept any arguments!");
+                }
+                else
+                {
+                    AppendToPage("/help, /h: lists all available commands and what they do");
+                    AppendToPage("/clear, /c: clears all tui page messages");
+                    AppendToPage("/command command, /cmd command: sends selected message as command to console");
+                    AppendToPage("/enableconsole, /ec: enables console-based updates");
+                    AppendToPage("/disableconsole, /dc: disables console-based updates");
+                    AppendToPage("/setpagetitle title, /spt title: updates page title");
+                }
+            }
+            else if (cmd == cmdClear
+                || cmd == cmdC)
+            {
+                if (split.size() > 1)
+                {
+                    AppendToPage("ERROR: 'clear' command does not accept any arguments!");
+                }
+                else
+                {
+                    lock_guard<mutex> lock(externalMutex);
+
+                    pageContent = {};
+                    pageHead = 0;
+                    pageCount = 0;
+                    pageTop = 0;
+                    pageSelection = 0;
+                }
+            }
+            else if (cmd == cmdGetCLICommands
+                || cmd == cmdGCC)
+            {
+                if (split.size() > 1)
+                {
+                    AppendToPage("ERROR: 'getclicommands' command does not accept any arguments!");
+                }
+                else
+                {
+                    for (const Command& c : CLI::GetCommands())
+                    {
+                        AppendToPage(c.primaryParam + ": " + c.description);
+                    }
+                }
+            }
+            else if (cmd == cmdCommand
+                || cmd == cmdCmd)
+            {
+                if (cmdContent.empty())
+                {
+                    AppendToPage("ERROR: 'command' command requires a command argument!");
+                }
+                else
+                {
+                    AppendToPage(cmdContent);
+                    string fullCmd = cmdContent + " 2>&1";
+
+#if defined(KWIN_ANY)
+                    FILE* fp = _popen(fullCmd.c_str(), "r");
+#else
+                    FILE* fp = popen(fullCmd.c_str(), "r");
+#endif
+
+                    if (!fp)
+                    {
+                        AppendToPage("ERROR: Failed to run command!");
+                    }
+                    else
+                    {
+                        char buf[4096];
+                        string carry{};
+
+                        while (fgets(buf, sizeof(buf), fp))
+                        {
+                            carry += buf;
+                            size_t pos{};
+
+                            while ((pos = carry.find('\n')) != string::npos)
+                            {
+                                string line = carry.substr(0, pos);
+                                carry.erase(0, pos + 1);
+                                if (!line.empty()
+                                    && line.back() == '\r')
+                                {
+                                    line.pop_back();
+                                }
+
+                                AppendToPage(std::move(line));
+                            }
+                        }
+
+                        if (!carry.empty())
+                        {
+                            if (carry.back() == '\r') carry.pop_back();
+                            AppendToPage(std::move(carry));
+                        }
+
+#if defined(KWIN_ANY)
+                        _pclose(fp);
+#else
+                        pclose(fp);
+#endif
+                    }
+                }
+            }
+            else if (cmd == cmdEnableConsole
+                || cmd == cmdEC)
+            {
+                if (split.size() > 1)
+                {
+                    AppendToPage("ERROR: 'enableconsole' command does not accept any arguments!");
+                }
+                else
+                {
+                    AppendToPage("Enabled console messages.");
+                    canConsoleWriteToPage = true;
+                }
+            }
+            else if (cmd == cmdDisableConsole
+                || cmd == cmdDC)
+            {
+                if (split.size() > 1)
+                {
+                    AppendToPage("ERROR: 'disableconsole' command does not accept any arguments!");
+                }
+                else
+                {
+                    AppendToPage("Disabled console messages.");
+                    canConsoleWriteToPage = false;
+                }
+            }
+            else if (cmd == cmdSetPageTitle
+                || cmd == cmdSPT)
+            {
+                if (cmdContent.empty())
+                {
+                    AppendToPage("ERROR: 'setpagetitle' command requires a value!");
+                }
+                else
+                {
+                    AppendToPage("Updated page title.");
+                    SetPageTitle(cmdContent);
+                }
+            }
+            else
+            {
+                AppendToPage(
+                    "ERROR: Command '" + cmd + "' was not found! "
+                    "Type '/help' or '/h' to list all available commands.");
+            }
+        }
+        else AppendToPage(nextFrameText);
+
+        nextFrameText.clear();
     }
 
     void TUI::UpdateDisplayedContent()
@@ -390,8 +718,6 @@ namespace KalaCLI
 
             startedUpdate = true;
         }
-
-        if (!isEnabled) return;
 
         auto get_console_size = []() -> vec2
             {
@@ -427,15 +753,7 @@ namespace KalaCLI
             || totalSize.y < HEIGHT_MIN)
         {
             //restore to real console before printing error
-#if defined(KWIN_ANY)
-            _dup2(real_out, _fileno(stdout));
-            _dup2(real_err, _fileno(stderr));
-            SetStdHandle(STD_OUTPUT_HANDLE, (HANDLE)_get_osfhandle(real_out));
-            SetStdHandle(STD_ERROR_HANDLE, (HANDLE)_get_osfhandle(real_err));
-#else
-            dup2(real_out, STDOUT_FILENO);
-            dup2(real_err, STDERR_FILENO);
-#endif
+            StartDrawCapture(false);
 
             //clear
             cout << "\x1b[2J\x1b[H";
@@ -454,44 +772,14 @@ namespace KalaCLI
             cout.flush();
 
             //re-hijack before returning so next frame starts correctly
-#if defined(KWIN_ANY)
-            _dup2(cap_pipe[1], _fileno(stdout));
-            _dup2(cap_pipe[1], _fileno(stderr));
-            SetStdHandle(STD_OUTPUT_HANDLE, (HANDLE)_get_osfhandle(cap_pipe[1]));
-            SetStdHandle(STD_ERROR_HANDLE, (HANDLE)_get_osfhandle(cap_pipe[1]));
-#else
-            dup2(cap_pipe[1], STDOUT_FILENO);
-            dup2(cap_pipe[1], STDERR_FILENO);
-#endif
+            StopDrawCapture();
 
             return;
         }
 
-        static string nextFrameText{};
-        if (!nextFrameText.empty())
-        {
-            //cout << nextFrameText << "\n";
-            //cout.flush();
+        if (!nextFrameText.empty()) SendCommand(nextFrameText);
 
-            std::system(nextFrameText.c_str());
-
-            sleep_for(milliseconds(5)); //wait for thread to push to pageContent
-            nextFrameText.clear();
-        }
-
-        fflush(stdout);
-        fflush(stderr);
-        cout.flush();
-
-#if defined(KWIN_ANY)
-        _dup2(real_out, _fileno(stdout));
-        _dup2(real_err, _fileno(stderr));
-        SetStdHandle(STD_OUTPUT_HANDLE, (HANDLE)_get_osfhandle(real_out));
-        SetStdHandle(STD_ERROR_HANDLE, (HANDLE)_get_osfhandle(real_err));
-#else
-        dup2(real_out, STDOUT_FILENO);
-        dup2(real_err, STDERR_FILENO);
-#endif
+        StartDrawCapture(true);
 
         auto count_wrapped_lines = [&](const string& src) -> int
             {
@@ -1068,14 +1356,6 @@ namespace KalaCLI
 
         draw_input_box();
 
-#if defined(KWIN_ANY)
-        _dup2(cap_pipe[1], _fileno(stdout));
-        _dup2(cap_pipe[1], _fileno(stderr));
-        SetStdHandle(STD_OUTPUT_HANDLE, (HANDLE)_get_osfhandle(cap_pipe[1]));
-        SetStdHandle(STD_ERROR_HANDLE, (HANDLE)_get_osfhandle(cap_pipe[1]));
-#else
-        dup2(cap_pipe[1], STDOUT_FILENO);
-        dup2(cap_pipe[1], STDERR_FILENO);
-#endif
+        StopDrawCapture();
     }
 }

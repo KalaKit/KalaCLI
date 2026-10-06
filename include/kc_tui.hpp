@@ -21,14 +21,14 @@ namespace KalaCLI
     //how far back to store typed text history
     static constexpr u32 MAX_TYPED_TEXT_HISTORY = 100;
 
+    //Used for hardcoded TUI commands
+    static constexpr string_view TUI_COMMAND_PREFIX = "/";
+
     class LIB_API TUI
     {
     public:
-        static bool IsEnabled();
-        //Should the TUI be displayed or not, disabled by default,
-        //enabling it prints custom borders and takes control over what the console can print,
-        //may draw broken content if paired with other TUI systems or applications that draw complex content
-        static void SetEnabledState(bool state);
+        //Owning loop, call once, should not be ran together with KalaCLICore::Run
+        static void Run();
 
         static bool CanConsoleWriteToPage();
         //Should new log messages be appended at the bottom of existing page content,
@@ -39,11 +39,21 @@ namespace KalaCLI
         static void SetPageTitle(string_view title);
         //Decide what to display in the active page
         static void SetPageContent(const vector<string>& content);
-        //Alternative to manually typing a command
+        //Alternative to manually typing a command,
+        //commands that start with CLI_COMMAND_PREFIX are sent to kc_command.hpp ParseCommand,
+        //commands that start with TUI_COMMAND_PREFIX are sent to kc_tui.hpp internal command parser,
+        //writing a message without a command prefix writes it to the tui like a normal message
+        //TUI commands:
+        //  /help, /h: lists all available commands and what they do
+        //  /clear, /c: clears all tui page messages
+        //  /getclicommands, /gcc: lists all available cli commands and what they do
+        //  /command command, /cmd command: sends selected message as command to console
+        //  /enableconsole, /ec: enables console-based updates
+        //  /disableconsole, /dc: disables console-based updates
+        //  /setpagetitle title, /spt title: updates page title
         static void SendCommand(string_view command);
 
-        //Updates borders and content to fit new size
-        //if old size does not match new size, call once per frame 
+    private:
         static void UpdateDisplayedContent();
     };
 }
