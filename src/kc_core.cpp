@@ -123,8 +123,11 @@ struct PageViewBoxData
 
 struct InputBoxData
 {
+	u32 inputScrollOffset{};
+
 	string typedText{};
 	string nextFrameText{};
+
 	array<string, MAX_TYPED_TEXT_HISTORY> typedTextHistory{};
 	u32 typedTextCount{}; //valid entries
 	u32 typedTextHead{}; //oldest entry index
@@ -132,8 +135,8 @@ struct InputBoxData
 };
 
 static CoreData coreData{};
-static PageViewBoxData pageViewBoxData{};
-static InputBoxData inputBoxData{};
+static PageViewBoxData pageData{};
+static InputBoxData inputData{};
 
 static const string cmdHelp = string(COMMAND_PREFIX) + "help";
 static const string cmdH = string(COMMAND_PREFIX) + "h";
@@ -221,13 +224,13 @@ static void StartCapture()
                         line.pop_back();
                     }
 
-                    if (!pageViewBoxData.canConsoleWriteToPage.load()) continue;
+                    if (!pageData.canConsoleWriteToPage.load()) continue;
 
                     KalaCLICore::AppendToPage(std::move(line));
                 }
 
                 if (!carry.empty()
-                    && pageViewBoxData.canConsoleWriteToPage.load())
+                    && pageData.canConsoleWriteToPage.load())
                 {
                     string line = carry;
                     if (!line.empty()
@@ -283,13 +286,13 @@ static void StartCapture()
                         line.pop_back();
                     }
 
-                    if (!pageViewBoxData.canConsoleWriteToPage.load()) continue;
+                    if (!pageData.canConsoleWriteToPage.load()) continue;
 
                     KalaCLICore::AppendToPage(std::move(line));
                 }
 
                 if (!carry.empty()
-                    && pageViewBoxData.canConsoleWriteToPage.load())
+                    && pageData.canConsoleWriteToPage.load())
                 {
                     string line = carry;
                     if (!line.empty()
@@ -489,8 +492,8 @@ namespace KalaCLI
             }
         });
 
-    bool KalaCLICore::CanConsoleWriteToPage() { return pageViewBoxData.canConsoleWriteToPage.load(); }
-    void KalaCLICore::SetConsoleWritesToPageState(bool state) { pageViewBoxData.canConsoleWriteToPage.store(state); }
+    bool KalaCLICore::CanConsoleWriteToPage() { return pageData.canConsoleWriteToPage.load(); }
+    void KalaCLICore::SetConsoleWritesToPageState(bool state) { pageData.canConsoleWriteToPage.store(state); }
 
     void KalaCLICore::SetPageTitle(string_view title)
     {
@@ -500,7 +503,7 @@ namespace KalaCLI
             return;
         }
 
-        pageViewBoxData.pageTitle = title;
+        pageData.pageTitle = title;
     }
 
     void KalaCLICore::SetPageContent(
@@ -512,7 +515,7 @@ namespace KalaCLI
             AppendToPage("ERROR: Failed to update page content because it was too big!");
             return;
         }
-        if (pageViewBoxData.canConsoleWriteToPage.load())
+        if (pageData.canConsoleWriteToPage.load())
         {
             AppendToPage("ERROR: Failed to update page content because console writing is enabled!");
             return;
@@ -520,29 +523,29 @@ namespace KalaCLI
 
         lock_guard<mutex> lock(coreData.externalMutex);
 
-        pageViewBoxData.pageContent = {};
-        pageViewBoxData.pageHead = 0;
-        pageViewBoxData.pageCount = scast<u32>(content.size());
-        pageViewBoxData.pageTop = 0;
-        pageViewBoxData.pageSelection = 0;
+        pageData.pageContent = {};
+        pageData.pageHead = 0;
+        pageData.pageCount = scast<u32>(content.size());
+        pageData.pageTop = 0;
+        pageData.pageSelection = 0;
 
-        for (u32 i = 0; i < pageViewBoxData.pageCount; ++i)
+        for (u32 i = 0; i < pageData.pageCount; ++i)
         {
-            pageViewBoxData.pageContent[i] = content[i];
+            pageData.pageContent[i] = content[i];
         }
     }
     void KalaCLICore::AppendToPage(string_view line)
     {
         lock_guard<mutex> lock(coreData.externalMutex);
-        if (pageViewBoxData.pageCount < MAX_PAGE_LINES)
+        if (pageData.pageCount < MAX_PAGE_LINES)
         {
-            pageViewBoxData.pageContent[(pageViewBoxData.pageHead + pageViewBoxData.pageCount) % MAX_PAGE_LINES] = line;
-            ++pageViewBoxData.pageCount;
+            pageData.pageContent[(pageData.pageHead + pageData.pageCount) % MAX_PAGE_LINES] = line;
+            ++pageData.pageCount;
         }
         else
         {
-            pageViewBoxData.pageContent[pageViewBoxData.pageHead] = line;
-            pageViewBoxData.pageHead = (pageViewBoxData.pageHead + 1) % MAX_PAGE_LINES;
+            pageData.pageContent[pageData.pageHead] = line;
+            pageData.pageHead = (pageData.pageHead + 1) % MAX_PAGE_LINES;
         }
     }
 
@@ -627,11 +630,11 @@ namespace KalaCLI
                 {
                     lock_guard<mutex> lock(coreData.externalMutex);
 
-                    pageViewBoxData.pageContent = {};
-                    pageViewBoxData.pageHead = 0;
-                    pageViewBoxData.pageCount = 0;
-                    pageViewBoxData.pageTop = 0;
-                    pageViewBoxData.pageSelection = 0;
+                    pageData.pageContent = {};
+                    pageData.pageHead = 0;
+                    pageData.pageCount = 0;
+                    pageData.pageTop = 0;
+                    pageData.pageSelection = 0;
                 }
             }
             else if (cmd == cmdCommand
@@ -704,7 +707,7 @@ namespace KalaCLI
                 else
                 {
                     AppendToPage("Enabled console messages.");
-                    pageViewBoxData.canConsoleWriteToPage = true;
+                    pageData.canConsoleWriteToPage = true;
                 }
             }
             else if (cmd == cmdDisableConsole
@@ -717,7 +720,7 @@ namespace KalaCLI
                 else
                 {
                     AppendToPage("Disabled console messages.");
-                    pageViewBoxData.canConsoleWriteToPage = false;
+                    pageData.canConsoleWriteToPage = false;
                 }
             }
             else if (cmd == cmdSetPageTitle
@@ -771,10 +774,10 @@ namespace KalaCLI
         }
         else
         {
-            if (prefixlessInputAction) prefixlessInputAction(inputBoxData.nextFrameText);
+            if (prefixlessInputAction) prefixlessInputAction(inputData.nextFrameText);
         }
 
-        inputBoxData.nextFrameText.clear();
+        inputData.nextFrameText.clear();
     }
 
     void KalaCLICore::AddCommand(Command&& command)
@@ -979,7 +982,7 @@ namespace KalaCLI
             return;
         }
 
-        if (!inputBoxData.nextFrameText.empty()) SendCommand(inputBoxData.nextFrameText);
+        if (!inputData.nextFrameText.empty()) SendCommand(inputData.nextFrameText);
 
         StartDrawCapture(true);
 
@@ -1043,7 +1046,7 @@ namespace KalaCLI
 
                 u32 pageH = h - 3; //dont draw in bottom three rows
                 coreData.innerW = w - 2;
-                pageViewBoxData.innerPageH = pageH - 2;
+                pageData.innerPageH = pageH - 2;
 
                 string horizontalBar{};
                 horizontalBar.reserve(coreData.innerW * 3);
@@ -1058,8 +1061,8 @@ namespace KalaCLI
 
                 auto draw_top_border = [&]() -> void
                     {
-                        if (pageViewBoxData.pageTitle.empty()        //no content to draw
-                            || pageViewBoxData.pageTitle.size() < 3) //content is too short
+                        if (pageData.pageTitle.empty()        //no content to draw
+                            || pageData.pageTitle.size() < 3) //content is too short
                         {
                             coreData.frame << "┌" << horizontalBar << "┐";
 
@@ -1077,10 +1080,10 @@ namespace KalaCLI
                                 static string lastTitle{};
                                 static u32 lastAvailable{};
 
-                                if (pageViewBoxData.pageTitle != lastTitle
+                                if (pageData.pageTitle != lastTitle
                                     || available != lastAvailable)
                                 {
-                                    lastTitle = pageViewBoxData.pageTitle;
+                                    lastTitle = pageData.pageTitle;
                                     lastAvailable = available;
 
                                     offset = 0;
@@ -1090,14 +1093,14 @@ namespace KalaCLI
                                     last = steady_clock::now();
                                 }
 
-                                if (pageViewBoxData.pageTitle.size() <= available)
+                                if (pageData.pageTitle.size() <= available)
                                 {
                                     offset = 0;
                                     dir = 1;
-                                    return pageViewBoxData.pageTitle;
+                                    return pageData.pageTitle;
                                 }
 
-                                int maxOffset = (int)pageViewBoxData.pageTitle.size() - (int)available;
+                                int maxOffset = (int)pageData.pageTitle.size() - (int)available;
                                 auto now = steady_clock::now();
 
                                 if (now - last >= milliseconds(250))
@@ -1128,17 +1131,17 @@ namespace KalaCLI
                                 //no dots at true left
                                 if (offset == 0)
 								{
-									return pageViewBoxData.pageTitle.substr(0, available - 3) + "...";
+									return pageData.pageTitle.substr(0, available - 3) + "...";
 								}
                                 //no dots at true right
                                 else if (offset == maxOffset)
 								{
-									return "..." + pageViewBoxData.pageTitle.substr(pageViewBoxData.pageTitle.size() - (available - 3));
+									return "..." + pageData.pageTitle.substr(pageData.pageTitle.size() - (available - 3));
 								}
                                 //middle of scroll - dots on both sides
                                 else
 								{
-									return "..." + pageViewBoxData.pageTitle.substr(offset + 3, available - 6) + "...";
+									return "..." + pageData.pageTitle.substr(offset + 3, available - 6) + "...";
 								}
                             };
 
@@ -1164,50 +1167,50 @@ namespace KalaCLI
                         int total{};
                         {
                             lock_guard<mutex> lock(coreData.externalMutex);
-                            for (u32 i = 0; i < pageViewBoxData.pageCount; ++i)
+                            for (u32 i = 0; i < pageData.pageCount; ++i)
                             {
-                                total += count_wrapped_lines(pageViewBoxData.pageContent[(pageViewBoxData.pageHead + i) % MAX_PAGE_LINES]);
+                                total += count_wrapped_lines(pageData.pageContent[(pageData.pageHead + i) % MAX_PAGE_LINES]);
                             }
                         }
 
                         if (!coreData.inPageMode)
                         {
-                            pageViewBoxData.pageTop = max(0, total - (int)pageViewBoxData.innerPageH);
-                            pageViewBoxData.pageSelection = max(0, total - 1);
+                            pageData.pageTop = max(0, total - (int)pageData.innerPageH);
+                            pageData.pageSelection = max(0, total - 1);
                         }
                         else
                         {
-                            pageViewBoxData.pageTop = clamp(
-								pageViewBoxData.pageTop,
+                            pageData.pageTop = clamp(
+								pageData.pageTop,
 								0u,
-								scast<u32>(max(0, total - (int)pageViewBoxData.innerPageH)));
-                            pageViewBoxData.pageSelection = clamp(
-								pageViewBoxData.pageSelection,
+								scast<u32>(max(0, total - (int)pageData.innerPageH)));
+                            pageData.pageSelection = clamp(
+								pageData.pageSelection,
 								0u,
 								scast<u32>(max(0, total - 1)));
-                            if (pageViewBoxData.pageSelection < pageViewBoxData.pageTop)
+                            if (pageData.pageSelection < pageData.pageTop)
 							{
-								pageViewBoxData.pageTop = pageViewBoxData.pageSelection;
+								pageData.pageTop = pageData.pageSelection;
 							}
-                            if (pageViewBoxData.pageSelection >= pageViewBoxData.pageTop + (int)pageViewBoxData.innerPageH)
+                            if (pageData.pageSelection >= pageData.pageTop + (int)pageData.innerPageH)
 							{
-								pageViewBoxData.pageTop = pageViewBoxData.pageSelection - pageViewBoxData.innerPageH + 1;
+								pageData.pageTop = pageData.pageSelection - pageData.innerPageH + 1;
 							}
                         }
 
                         vector<string> wrapped{};
-                        wrapped.reserve(pageViewBoxData.innerPageH);
+                        wrapped.reserve(pageData.innerPageH);
 
                         {
                             lock_guard<mutex> lock(coreData.externalMutex);
                             u32 absIdx{}; //absolute wrapped index
-                            for (u32 i = 0; i < pageViewBoxData.pageCount && wrapped.size() < pageViewBoxData.innerPageH; ++i)
+                            for (u32 i = 0; i < pageData.pageCount && wrapped.size() < pageData.innerPageH; ++i)
                             {
-                                const string& src = pageViewBoxData.pageContent[(pageViewBoxData.pageHead + i) % MAX_PAGE_LINES];
+                                const string& src = pageData.pageContent[(pageData.pageHead + i) % MAX_PAGE_LINES];
                                 if (src.empty())
                                 {
-                                    if (absIdx >= pageViewBoxData.pageTop
-                                        && absIdx < pageViewBoxData.pageTop + pageViewBoxData.innerPageH)
+                                    if (absIdx >= pageData.pageTop
+                                        && absIdx < pageData.pageTop + pageData.innerPageH)
                                     {
                                         wrapped.push_back("");    
                                     }
@@ -1217,7 +1220,7 @@ namespace KalaCLI
 
                                 size_t start{};
                                 while (start < src.size()
-                                    && wrapped.size() < pageViewBoxData.innerPageH)
+                                    && wrapped.size() < pageData.innerPageH)
                                 {
                                     string out{};
                                     size_t remaining = src.size() - start;
@@ -1260,24 +1263,24 @@ namespace KalaCLI
                                         }
                                     }
 
-                                    if (absIdx >= pageViewBoxData.pageTop
-                                        && absIdx < pageViewBoxData.pageTop + pageViewBoxData.innerPageH)
+                                    if (absIdx >= pageData.pageTop
+                                        && absIdx < pageData.pageTop + pageData.innerPageH)
                                     {
                                         wrapped.push_back(out);
                                     }
                                     absIdx++;
-                                    if (absIdx >= pageViewBoxData.pageTop + pageViewBoxData.innerPageH
-                                        && wrapped.size() >= pageViewBoxData.innerPageH)
+                                    if (absIdx >= pageData.pageTop + pageData.innerPageH
+                                        && wrapped.size() >= pageData.innerPageH)
                                     {
                                         break;
                                     }
                                 }
 
-                                if (absIdx >= pageViewBoxData.pageTop + pageViewBoxData.innerPageH) break;
+                                if (absIdx >= pageData.pageTop + pageData.innerPageH) break;
                             }
                         }
 
-                        for (u32 i = 0; i < pageViewBoxData.innerPageH; ++i)
+                        for (u32 i = 0; i < pageData.innerPageH; ++i)
                         {
                             string line = (i < wrapped.size())
                                 ? wrapped[i]
@@ -1290,9 +1293,9 @@ namespace KalaCLI
                                 else line = line.substr(0, coreData.innerW);
                             }
 
-                            u32 absRow = pageViewBoxData.pageTop + i;
+                            u32 absRow = pageData.pageTop + i;
                             if (coreData.inPageMode
-                                && absRow == pageViewBoxData.pageSelection)
+                                && absRow == pageData.pageSelection)
                             {
                                 coreData.frame << "\n│\x1b[7m" << line << "\x1b[0m│";
                             }
@@ -1317,8 +1320,46 @@ namespace KalaCLI
 
                 for (u32 i = 0; i < coreData.innerW; ++i) horizontalBar += "─";
 
-                u32 pad = coreData.innerW > inputBoxData.typedText.size()
-                    ? coreData.innerW - inputBoxData.typedText.size()
+				//enforce max input length
+				if (inputData.typedText.size() > MAX_INPUT_LENGTH)
+				{
+					inputData.typedText.resize(MAX_INPUT_LENGTH);
+				}
+
+				//clamp scroll offset to valid range
+				if (inputData.typedText.size() <= coreData.innerW) inputData.inputScrollOffset = 0;
+				else
+				{
+					//keep cursor visible
+					if (coreData.cursorPos < inputData.inputScrollOffset)
+					{
+						inputData.inputScrollOffset = coreData.cursorPos;
+					}
+					else if (coreData.cursorPos >= inputData.inputScrollOffset + coreData.innerW)
+					{
+						inputData.inputScrollOffset = coreData.cursorPos - coreData.innerW + 1;
+					}
+
+					//clamp max scroll
+					u32 maxScroll = inputData.typedText.size() > coreData.innerW
+						? inputData.typedText.size() - coreData.innerW + 1
+						: 0;
+					if (inputData.inputScrollOffset > maxScroll)
+					{
+						inputData.inputScrollOffset = maxScroll;
+					}
+				}
+
+				//what is actually visible in input box
+				string visibleText{};
+				if (inputData.typedText.size() <= coreData.innerW) visibleText = inputData.typedText;
+				else
+				{
+					visibleText = inputData.typedText.substr(inputData.inputScrollOffset, coreData.innerW);
+				}
+
+                u32 pad = coreData.innerW > visibleText.size()
+                    ? coreData.innerW - visibleText.size()
                     : 0;
 
                 //snap cursor to where page view box stopped + wrap still disabled
@@ -1327,18 +1368,23 @@ namespace KalaCLI
                 //top border
                 coreData.frame << "┌" << horizontalBar << "┐\n";
                 //middle
-                coreData.frame << "│" << inputBoxData.typedText << string(pad, ' ') << "│\n";
+                coreData.frame << "│" << visibleText << string(pad, ' ') << "│\n";
                 //bottom border
                 coreData.frame << "└" << horizontalBar << "┘";
                 
                 //snap cursor to input pos start
                 coreData.frame << "\x1b[" << (inputStartRow + 1) << ";" << 2 << "H";
 
-                //paste whole input text string + clear remainder
-                coreData.frame << inputBoxData.typedText << string(pad, ' ');
+                //paste visible text + clear remainder
+                coreData.frame << visibleText << string(pad, ' ');
 
-                //move cursor to cursorPos
-                coreData.frame << "\x1b[" << (inputStartRow + 1) << ";" << (2 + coreData.cursorPos) << "H";
+                //move cursor to visible cursorPos
+				u32 visibleCursor = (coreData.cursorPos >= inputData.inputScrollOffset)
+					? coreData.cursorPos - inputData.inputScrollOffset
+					: 0;
+				if (visibleCursor > coreData.innerW) visibleCursor = coreData.innerW;
+
+                coreData.frame << "\x1b[" << (inputStartRow + 1) << ";" << (2 + visibleCursor) << "H";
 
                 //re-enable auto-wrap
                 coreData.frame << "\x1b[?7h";
@@ -1365,24 +1411,24 @@ namespace KalaCLI
                     int total{};
                     {
                         lock_guard<mutex> lock(coreData.externalMutex);
-                        for (u32 i = 0; i < pageViewBoxData.pageCount; ++i)
+                        for (u32 i = 0; i < pageData.pageCount; ++i)
                         {
-                            total += count_wrapped_lines(pageViewBoxData.pageContent[(pageViewBoxData.pageHead + i) % MAX_PAGE_LINES]);
+                            total += count_wrapped_lines(pageData.pageContent[(pageData.pageHead + i) % MAX_PAGE_LINES]);
                         }
                     }
 
                     if (key == ALLOWED_KEY::KEY_ARROW_UP
-                        && pageViewBoxData.pageSelection > 0)
+                        && pageData.pageSelection > 0)
                     {
-                        pageViewBoxData.pageSelection--;
-                        if (pageViewBoxData.pageSelection < pageViewBoxData.pageTop) pageViewBoxData.pageTop = pageViewBoxData.pageSelection;
+                        pageData.pageSelection--;
+                        if (pageData.pageSelection < pageData.pageTop) pageData.pageTop = pageData.pageSelection;
                     }
                     else if (key == ALLOWED_KEY::KEY_ARROW_DOWN)
                     {
-                        if ((int)pageViewBoxData.pageSelection < total - 1)
+                        if ((int)pageData.pageSelection < total - 1)
                         {
-                            pageViewBoxData.pageSelection++;
-                            if (pageViewBoxData.pageSelection >= pageViewBoxData.pageTop + pageViewBoxData.innerPageH) pageViewBoxData.pageTop++;
+                            pageData.pageSelection++;
+                            if (pageData.pageSelection >= pageData.pageTop + pageData.innerPageH) pageData.pageTop++;
                         }
                     }
                     else if (key == ALLOWED_KEY::KEY_CARRIAGE_RETURN
@@ -1392,12 +1438,12 @@ namespace KalaCLI
                         {
                             lock_guard<mutex> lock(coreData.externalMutex);
                             u32 absIdx{}; //absolute wrapped index
-                            for (u32 i = 0; i < pageViewBoxData.pageCount; ++i)
+                            for (u32 i = 0; i < pageData.pageCount; ++i)
                             {
-                                const string& src = pageViewBoxData.pageContent[(pageViewBoxData.pageHead + i) % MAX_PAGE_LINES];
+                                const string& src = pageData.pageContent[(pageData.pageHead + i) % MAX_PAGE_LINES];
                                 if (src.empty())
                                 {
-                                    if (absIdx == pageViewBoxData.pageSelection)
+                                    if (absIdx == pageData.pageSelection)
                                     {
                                         toCopy = "";
                                         break;    
@@ -1450,7 +1496,7 @@ namespace KalaCLI
                                         }
                                     }
 
-                                    if (absIdx == pageViewBoxData.pageSelection)
+                                    if (absIdx == pageData.pageSelection)
                                     {
                                         toCopy = out;
                                         break;
@@ -1458,17 +1504,17 @@ namespace KalaCLI
                                     absIdx++;
                                 }
 
-                                if (absIdx >= pageViewBoxData.pageSelection) break;
+                                if (absIdx >= pageData.pageSelection) break;
                             }
                         }
 
-						if (inputBoxData.typedText.empty())
+						if (inputData.typedText.empty())
 						{
 							ForceClose("a", "b");
 						}
 
-                        inputBoxData.typedText = toCopy;
-                        coreData.cursorPos = inputBoxData.typedText.size();
+                        inputData.typedText = toCopy;
+                        coreData.cursorPos = inputData.typedText.size();
                         coreData.inPageMode = false;
                     }
 
@@ -1484,12 +1530,12 @@ namespace KalaCLI
                     && c >= 32
                     && c <= 126)
                 {
-                    if (inputBoxData.typedText.size() < innerW)
+                    if (inputData.typedText.size() < MAX_INPUT_LENGTH)
                     {
-                        inputBoxData.typedText.insert(inputBoxData.typedText.begin() + coreData.cursorPos, c);
+                        inputData.typedText.insert(inputData.typedText.begin() + coreData.cursorPos, c);
                         coreData.cursorPos++;
-                        inputBoxData.typedHistoryPos = inputBoxData.typedTextCount > 0
-                            ? (int)inputBoxData.typedTextCount - 1
+                        inputData.typedHistoryPos = inputData.typedTextCount > 0
+                            ? (int)inputData.typedTextCount - 1
                             : -1;
                     }
 
@@ -1502,88 +1548,87 @@ namespace KalaCLI
                     coreData.cursorPos--;
                 }
                 else if (key == ALLOWED_KEY::KEY_ARROW_RIGHT
-                    && coreData.cursorPos < inputBoxData.typedText.size())
+                    && coreData.cursorPos < inputData.typedText.size())
                 {
                     coreData.cursorPos++;
                 }
                 else if (key == ALLOWED_KEY::KEY_ARROW_UP)
                 {
-                    if (inputBoxData.typedTextCount == 0) return;
+                    if (inputData.typedTextCount == 0) return;
 
-                    if (inputBoxData.typedText.empty()
-                        || inputBoxData.typedHistoryPos == -1)
+                    if (inputData.typedText.empty()
+                        || inputData.typedHistoryPos == -1)
                     {
-                        inputBoxData.typedHistoryPos = (int)inputBoxData.typedTextCount - 1;
+                        inputData.typedHistoryPos = (int)inputData.typedTextCount - 1;
                     }
                     else
                     {
-                        --inputBoxData.typedHistoryPos;
-                        if (inputBoxData.typedHistoryPos < 0) inputBoxData.typedHistoryPos = (int)inputBoxData.typedTextCount - 1;
+                        --inputData.typedHistoryPos;
+                        if (inputData.typedHistoryPos < 0) inputData.typedHistoryPos = (int)inputData.typedTextCount - 1;
                     }
 
-                    inputBoxData.typedText = inputBoxData.typedTextHistory[
-						(inputBoxData.typedTextHead + (u32)inputBoxData.typedHistoryPos) 
+                    inputData.typedText = inputData.typedTextHistory[
+						(inputData.typedTextHead + (u32)inputData.typedHistoryPos) 
 						% MAX_TYPED_TEXT_HISTORY];
-                    if (inputBoxData.typedText.size() > innerW) inputBoxData.typedText.resize(innerW); //hard cut, no ...
-                    coreData.cursorPos = inputBoxData.typedText.size();
+                    coreData.cursorPos = inputData.typedText.size();
                 }
                 else if (key == ALLOWED_KEY::KEY_ARROW_DOWN)
                 {
-                    if (inputBoxData.typedTextCount == 0) return;
+                    if (inputData.typedTextCount == 0) return;
 
-                    if (inputBoxData.typedText.empty()
-                        || inputBoxData.typedHistoryPos == -1)
+                    if (inputData.typedText.empty()
+                        || inputData.typedHistoryPos == -1)
                     {
-                        inputBoxData.typedHistoryPos = 0;
+                        inputData.typedHistoryPos = 0;
                     }
                     else
                     {
-                        ++inputBoxData.typedHistoryPos;
-                        if (inputBoxData.typedHistoryPos >= (int)inputBoxData.typedTextCount) inputBoxData.typedHistoryPos = 0;
+                        ++inputData.typedHistoryPos;
+                        if (inputData.typedHistoryPos >= (int)inputData.typedTextCount) inputData.typedHistoryPos = 0;
                     }
 
-                    inputBoxData.typedText = inputBoxData.typedTextHistory[
-						(inputBoxData.typedTextHead + (u32)inputBoxData.typedHistoryPos) 
+                    inputData.typedText = inputData.typedTextHistory[
+						(inputData.typedTextHead + (u32)inputData.typedHistoryPos) 
 						% MAX_TYPED_TEXT_HISTORY];
-                    if (inputBoxData.typedText.size() > innerW) inputBoxData.typedText.resize(innerW); //hard cut, no ...
-                    coreData.cursorPos = inputBoxData.typedText.size();
+                    coreData.cursorPos = inputData.typedText.size();
                 }
                 else if (key == ALLOWED_KEY::KEY_CARRIAGE_RETURN
                     || key == ALLOWED_KEY::KEY_LINE_FEED)
                 {
-                    if (!inputBoxData.typedText.empty())
+                    if (!inputData.typedText.empty())
                     {
-                        inputBoxData.nextFrameText = inputBoxData.typedText;
+                        inputData.nextFrameText = inputData.typedText;
 
-                        if (inputBoxData.typedTextCount < MAX_TYPED_TEXT_HISTORY)
+                        if (inputData.typedTextCount < MAX_TYPED_TEXT_HISTORY)
                         {
-                            inputBoxData.typedTextHistory[
-								(inputBoxData.typedTextHead + inputBoxData.typedTextCount) 
-								% MAX_TYPED_TEXT_HISTORY] = inputBoxData.typedText;
-                            ++inputBoxData.typedTextCount;
+                            inputData.typedTextHistory[
+								(inputData.typedTextHead + inputData.typedTextCount) 
+								% MAX_TYPED_TEXT_HISTORY] = inputData.typedText;
+                            ++inputData.typedTextCount;
                         }
                         else
                         {
-                            inputBoxData.typedTextHistory[inputBoxData.typedTextCount] = inputBoxData.typedText;
-                            inputBoxData.typedTextHead = (inputBoxData.typedTextHead + 1) % MAX_TYPED_TEXT_HISTORY;
+                            inputData.typedTextHistory[inputData.typedTextHead] = inputData.typedText;
+                            inputData.typedTextHead = (inputData.typedTextHead + 1) % MAX_TYPED_TEXT_HISTORY;
                         }
                     }
 
-                    inputBoxData.typedText.clear();
+                    inputData.typedText.clear();
                     coreData.cursorPos = 0;
-                    inputBoxData.typedHistoryPos = inputBoxData.typedTextCount > 0
-                        ? (int)inputBoxData.typedTextCount - 1
+					inputData.inputScrollOffset = 0;
+                    inputData.typedHistoryPos = inputData.typedTextCount > 0
+                        ? (int)inputData.typedTextCount - 1
                         : -1;
                 }
                 else if ((key == ALLOWED_KEY::KEY_BACKSPACE
                     || key == ALLOWED_KEY::KEY_DELETE)
                     && coreData.cursorPos > 0
-                    && !inputBoxData.typedText.empty())
+                    && !inputData.typedText.empty())
                 {
-                    inputBoxData.typedText.erase(coreData.cursorPos - 1, 1);
+                    inputData.typedText.erase(coreData.cursorPos - 1, 1);
                     coreData.cursorPos--;
-                    inputBoxData.typedHistoryPos = inputBoxData.typedTextCount > 0
-                        ? (int)inputBoxData.typedTextCount - 1
+                    inputData.typedHistoryPos = inputData.typedTextCount > 0
+                        ? (int)inputData.typedTextCount - 1
                         : -1;
                 }
             };

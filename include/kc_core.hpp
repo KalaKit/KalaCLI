@@ -26,7 +26,7 @@ namespace KalaCLI
     static constexpr u32 MAX_PAGE_LINES = 1000;
 
 	//How many characters can be written into the text box
-	static constexpr u32 MAX_INPUT_LENGTH = 100;
+	static constexpr u32 MAX_INPUT_LENGTH = 1000;
     //How far back to store typed text history
 	//after enter was pressed and text was cleared from input box
     static constexpr u32 MAX_TYPED_TEXT_HISTORY = 100;
