@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <termios.h>
 #include <csignal>
+#include <cstdio>
 #endif
 
 #include "log_utils.hpp"
@@ -155,6 +156,9 @@ static const string cmdDC = string(COMMAND_PREFIX) + "dc";
 
 static const string cmdSetPageTitle = string(COMMAND_PREFIX) + "setpagetitle";
 static const string cmdSPT = string(COMMAND_PREFIX) + "spt";
+
+static const string cmdCopyPage = string(COMMAND_PREFIX) + "copypage";
+static const string cmdCP = string(COMMAND_PREFIX) + "cp";
 
 static const string cmdExit = string(COMMAND_PREFIX) + "exit";
 static const string cmdE = string(COMMAND_PREFIX) + "e";
@@ -608,6 +612,9 @@ namespace KalaCLI
                         string(COMMAND_PREFIX) + "disableconsole, " + string(COMMAND_PREFIX) 
                         + "dc: disables console-based updates");
                     AppendToPage(
+                        string(COMMAND_PREFIX) + "copypage, " + string(COMMAND_PREFIX) 
+                        + "cp: copies page content to clipboard");
+                    AppendToPage(
                         string(COMMAND_PREFIX) + "setpagetitle title, " + string(COMMAND_PREFIX) 
                         + "spt title: updates page title");
 
@@ -736,6 +743,98 @@ namespace KalaCLI
                     SetPageTitle(cmdContent);
                 }
             }
+            else if (cmd == cmdCopyPage
+                || cmd == cmdCP)
+            {
+                if (split.size() > 1)
+                {
+                    AppendToPage("ERROR: 'copypage' command does not accept any arguments!");
+                }
+                else
+                {
+					if (pageData.pageContent.empty())
+					{
+						AppendToPage("ERROR: Failed to copy page content to clipboard because page content was empty!");
+					}
+					else
+					{
+						string combined{};
+						size_t start = pageData.pageHead;
+						size_t end = min(pageData.pageContent.size(), start + pageData.pageCount);
+
+#if defined(KWIN_ANY)
+						for (size_t i = start; i < end; ++i)
+						{
+							combined += pageData.pageContent[i];
+							if (i + 1 < end) combined += "\r\n";
+						}
+					
+						auto copy_to_clipboard = [&combined]() -> string
+							{
+								if (!OpenClipboard(nullptr)) return "Failed to run OpenClipboard.";
+								EmptyClipboard();
+
+								HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, combined.size() + 1);
+								if (!hMem)
+								{
+									CloseClipboard();
+									return "Failed to allocate hMem.";
+								}
+
+								char* pMem = (char*)GlobalLock(hMem);
+								memcpy(pMem, combined.c_str(), combined.size() + 1);
+								GlobalUnlock(hMem);
+
+								SetClipboardData(CF_TEXT, hMem);
+								CloseClipboard();
+
+								return "";
+							};
+
+						string err = copy_to_clipboard();
+						if (!err.empty())
+						{
+							AppendToPage("ERROR: Failed to copy page content to clipboard! Reason: " + err);
+						}
+						else AppendToPage("Copied page content to clipboard.");
+#else
+						for (size_t i = start; i < end; ++i)
+						{
+							combined += pageData.pageContent[i];
+							if (i + 1 < end) combined += "\n";
+						}
+
+						auto copy_to_clipboard = [&combined](bool wl_copy) -> bool
+							{
+								FILE* pipe = popen(
+									(wl_copy 
+										? "wl-copy 2>/dev/null" 
+										: "xclip -selection clipboard 2>/dev/null"),
+										"w");
+								if (!pipe) return false;
+
+								size_t written = fwrite(
+									combined.data(),
+									1,
+									combined.size(),
+									pipe);
+
+								return pclose(pipe) == 0
+									&& written == combined.size();
+							};
+
+						if (copy_to_clipboard(true)
+							|| copy_to_clipboard(false))
+						{
+							AppendToPage("Copied page content to clipboard.");
+						}
+						else AppendToPage(
+							"ERROR: Failed to copy page content to clipboard because "
+							"'wl-copy' and 'xclip' failed to run!");
+#endif
+					}
+                }
+            }
             else if (cmd == cmdExit
                 || cmd == cmdE)
             {
@@ -802,6 +901,8 @@ namespace KalaCLI
             || command.primaryParam == cmdDC
             || command.primaryParam == cmdSetPageTitle
             || command.primaryParam == cmdSPT
+            || command.primaryParam == cmdCopyPage
+            || command.primaryParam == cmdCP
             || command.primaryParam == cmdExit
             || command.primaryParam == cmdE)
         {

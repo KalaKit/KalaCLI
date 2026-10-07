@@ -147,6 +147,7 @@ namespace KalaCLI
 		//- /enableconsole, /ec: enables console-based updates,
 		//- /disableconsole, /dc: disables console-based updates,
 		//- /setpagetitle title, /spt title: updates page title,
+		//- /copypage, /cp: copies page content to clipboard
 		//- /exit, /e: close the tui
 		static void SendCommand(string_view command);
 
