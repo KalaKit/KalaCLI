@@ -47,6 +47,7 @@ using KalaCLI::MAX_TYPED_TEXT_HISTORY;
 using KalaCLI::COMMAND_PREFIX;
 using KalaCLI::KalaCLICore;
 using KalaCLI::Command;
+using KalaCLI::PageDirection;
 
 #ifdef __linux__
 using std::raise;
@@ -54,6 +55,7 @@ using std::raise;
 
 using std::string;
 using std::string_view;
+using std::to_string;
 using std::vector;
 using std::array;
 using std::pair;
@@ -108,6 +110,13 @@ struct CoreData
 #endif
 };
 
+struct OverwrittenRow
+{
+    string content{};
+    u32 row{};
+    PageDirection direction{};
+};
+
 struct PageViewBoxData
 {
 	atomic<bool> canConsoleWriteToPage{};
@@ -118,12 +127,19 @@ struct PageViewBoxData
     pair<u32, u32> pageScrollRange{};
 
 	u32 innerPageH{};
-	u32 pageTop{}; //absolute wrapped line that is at row 0 of innerPageH
-	u32 pageSelection{}; //absolute selected line (0 - totalWrapped - 1)
+	u32 pageTop{}; //absolute row at visible row 0
+	u32 pageSelection{}; //absolute selected rendered row
 
 	array<string, MAX_PAGE_LINES> pageContent{};
 	u32 pageCount{}; //valid entries
 	u32 pageHead{}; //oldest entry index
+
+    //rendered content between pageTop and end of innerPageH
+    vector<pair<string, u32>> renderedPageContent{};
+
+    //extra storage for overwritten rows,
+    //changes rendered page content
+    vector<OverwrittenRow> overwrittenRows{};
 };
 
 struct InputBoxData
@@ -169,7 +185,7 @@ static const string cmdE = string(COMMAND_PREFIX) + "e";
 
 static vector<Command> addedCommands{};
 
-static function<void(u32, u32, string&)> highlightedRowEnterAction{};
+static function<void(u32, string&)> highlightedRowEnterAction{};
 static function<void(string&)> prefixlessInputAction{};
 
 enum class ALLOWED_KEY : u32
@@ -500,22 +516,23 @@ namespace KalaCLI
             }
         });
 
-    u32 KalaCLICore::ResolveRow(
-        TextRange originRange,
-        u32 originRow,
-        TextRange targetRange,
-        u32 targetRow)
-    {
-
-    }
-
     u32 KalaCLICore::GetRowSize() { return coreData.innerW; }
-    u32 KalaCLICore::GetRowCount() {  }
+    u32 KalaCLICore::GetRowCount() { return pageData.innerPageH; }
     u32 KalaCLICore::GetHighlightedRow(TextRange textRange)
     {
+        if (!coreData.inPageMode) return 0;
 
+        switch (textRange)
+        {
+        default:
+        case TextRange::R_ALL:
+            return coreData.cursorPos;
+        case TextRange::R_VISIBLE:
+            return coreData.cursorPos - pageData.pageTop;
+        case TextRange::R_HIGHLIGHTED_ROW:
+            return 0;
+        }
     }
-    u32 KalaCLICore::GetHighlightedColumn() {  }
 
     bool KalaCLICore::CanConsoleWriteToPage() { return pageData.canConsoleWriteToPage.load(); }
     void KalaCLICore::SetConsoleWritesToPageState(bool state) { pageData.canConsoleWriteToPage.store(state); }
@@ -529,7 +546,20 @@ namespace KalaCLI
 
     void KalaCLICore::SetPageScrollRange(pair<u32, u32> range)
     {
+        if (range.first + range.second >= pageData.innerPageH)
+        {
+            AppendToPage(
+                "ERROR: Failed to set page scroll range because "
+                "top + bottom range cannot be equal to or more than page height!");
+            return;
+        }
 
+        pageData.pageScrollRange = range;
+
+        AppendToPage(
+            "Set page scroll range to '" 
+            + to_string(pageData.pageScrollRange.first) + ", " 
+            + to_string(pageData.pageScrollRange.second) + "'.");
     }
 
     void KalaCLICore::SetPageTitle(string_view title)
@@ -543,22 +573,57 @@ namespace KalaCLI
         pageData.pageTitle = title;
     }
 
-    const vector<string>& KalaCLICore::GetPageContent(TextRange textRange)
+    vector<string> KalaCLICore::GetPageContent(TextRange textRange)
     {
-
-    }
-    void KalaCLICore::SetPageContent(
-		const vector<string>& content,
-		TextRange textRange)
-    {
-        if (content.size() > MAX_PAGE_LINES)
+        switch (textRange)
         {
-            AppendToPage("ERROR: Failed to update page content because it was too big!");
-            return;
+        default:
+        case TextRange::R_ALL:
+        {
+            lock_guard<mutex> lock(coreData.externalMutex);
+
+            vector<string> content{};
+            content.reserve(pageData.pageCount);
+
+            for (u32 i = 0; i < pageData.pageCount; ++i)
+            {
+                content.push_back(pageData.pageContent[
+                    (pageData.pageHead + i) % MAX_PAGE_LINES]);
+            }
+
+            return content;
         }
+        case TextRange::R_VISIBLE:
+        {
+            vector<string> content{};
+            content.reserve(pageData.renderedPageContent.size());
+            for (const pair<string, u32>& row : pageData.renderedPageContent)
+            {
+                content.push_back(row.first);
+            }
+
+            return content;
+        }
+        case TextRange::R_HIGHLIGHTED_ROW:
+        {
+            return
+            {
+                pageData.renderedPageContent[
+                    GetHighlightedRow(TextRange::R_VISIBLE)].first
+            };
+        }
+        }
+    }
+    void KalaCLICore::SetPageContent(const vector<string>& content)
+    {
         if (pageData.canConsoleWriteToPage.load())
         {
             AppendToPage("ERROR: Failed to update page content because console writing is enabled!");
+            return;
+        }
+        if (content.size() > MAX_PAGE_LINES)
+        {
+            AppendToPage("ERROR: Failed to update page content because it was too big!");
             return;
         }
 
@@ -578,6 +643,12 @@ namespace KalaCLI
     
     void KalaCLICore::AppendToPage(string_view line)
     {
+        if (!coreData.startedUpdate)
+        {
+            Log::Print(line, true);
+            return;
+        }
+
         lock_guard<mutex> lock(coreData.externalMutex);
         if (pageData.pageCount < MAX_PAGE_LINES)
         {
@@ -593,14 +664,42 @@ namespace KalaCLI
 
     void KalaCLICore::OverwriteRow(
         const string& content,
-        TextRange textRange,
         PageDirection pageDirection,
         u32 targetRow)
     {
+        if (targetRow >= pageData.innerPageH)
+        {
+            AppendToPage("ERROR: Target row cannot exceed visible page area height!");
+            return;
+        }
 
+        lock_guard<mutex> lock(coreData.externalMutex);
+
+        for (auto it = pageData.overwrittenRows.begin();
+            it != pageData.overwrittenRows.end();
+            ++it)
+        {
+            if (it->row == targetRow
+                && it->direction == pageDirection)
+            {
+                if (content.empty()) pageData.overwrittenRows.erase(it);
+                else                 it->content = content;
+                return;
+            }
+        }
+
+        if (!content.empty())
+        {
+            pageData.overwrittenRows.push_back(
+                {
+                    .content = content,
+                    .row = targetRow,
+                    .direction = pageDirection
+                });
+        } 
     }
 
-    void KalaCLICore::SetHighlightedRowEnterAction(function<void(u32, u32, string&)> action)
+    void KalaCLICore::SetHighlightedRowEnterAction(function<void(u32, string&)> action)
     {
         AppendToPage("Updated highlighted enter action.");
         highlightedRowEnterAction = action;
@@ -621,7 +720,7 @@ namespace KalaCLI
             if (!err.empty())
             {
                 ForceClose(
-                    "KalaCLI TUI error",
+                    "KalaCLI core error",
                     "Failed to send command '" + string(command) + "'! Reason: " + err);
             }
 
@@ -648,7 +747,7 @@ namespace KalaCLI
                         + "h: lists all available commands and what they do");
                     AppendToPage(
                         string(COMMAND_PREFIX) + "clear, " + string(COMMAND_PREFIX) 
-                        + "c: clears all tui page messages");
+                        + "c: clears all CLI page messages");
                     AppendToPage(
                         string(COMMAND_PREFIX) + "command command, " + string(COMMAND_PREFIX) 
                         + "cmd command: sends selected message as command to console");
@@ -700,7 +799,7 @@ namespace KalaCLI
                 }
                 else
                 {
-                    AppendToPage(cmdContent);
+                    AppendToPage("  command: " + cmdContent);
                     string fullCmd = cmdContent + " 2>&1";
 
 #if defined(KWIN_ANY)
@@ -799,87 +898,94 @@ namespace KalaCLI
                 }
                 else
                 {
-					if (pageData.pageContent.empty())
-					{
-						AppendToPage("ERROR: Failed to copy page content to clipboard because page content was empty!");
-					}
-					else
-					{
-						string combined{};
-						size_t start = pageData.pageHead;
-						size_t end = min(pageData.pageContent.size(), start + pageData.pageCount);
+                    string combined{};
+                    size_t start = pageData.pageHead;
+                    size_t end = min(pageData.pageContent.size(), start + pageData.pageCount);
 
 #if defined(KWIN_ANY)
-						for (size_t i = start; i < end; ++i)
-						{
-							combined += pageData.pageContent[i];
-							if (i + 1 < end) combined += "\r\n";
-						}
-					
-						auto copy_to_clipboard = [&combined]() -> string
-							{
-								if (!OpenClipboard(nullptr)) return "Failed to run OpenClipboard.";
-								EmptyClipboard();
+                    for (size_t i = start; i < end; ++i)
+                    {
+                        combined += pageData.pageContent[i];
+                        if (i + 1 < end) combined += "\r\n";
+                    }
 
-								HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, combined.size() + 1);
-								if (!hMem)
-								{
-									CloseClipboard();
-									return "Failed to allocate hMem.";
-								}
+                    if (combined.empty())
+                    {
+                        AppendToPage("ERROR: Failed to copy page content to clipboard because page content was empty!");
+                    }
+                    else
+                    {
+                        auto copy_to_clipboard = [&combined]() -> string
+                            {
+                                if (!OpenClipboard(nullptr)) return "Failed to run OpenClipboard.";
+                                EmptyClipboard();
 
-								char* pMem = (char*)GlobalLock(hMem);
-								memcpy(pMem, combined.c_str(), combined.size() + 1);
-								GlobalUnlock(hMem);
+                                HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, combined.size() + 1);
+                                if (!hMem)
+                                {
+                                    CloseClipboard();
+                                    return "Failed to allocate hMem.";
+                                }
 
-								SetClipboardData(CF_TEXT, hMem);
-								CloseClipboard();
+                                char* pMem = (char*)GlobalLock(hMem);
+                                memcpy(pMem, combined.c_str(), combined.size() + 1);
+                                GlobalUnlock(hMem);
 
-								return "";
-							};
+                                SetClipboardData(CF_TEXT, hMem);
+                                CloseClipboard();
 
-						string err = copy_to_clipboard();
-						if (!err.empty())
-						{
-							AppendToPage("ERROR: Failed to copy page content to clipboard! Reason: " + err);
-						}
-						else AppendToPage("Copied page content to clipboard.");
+                                return "";
+                            };
+
+                        string err = copy_to_clipboard();
+                        if (!err.empty())
+                        {
+                            AppendToPage("ERROR: Failed to copy page content to clipboard! Reason: " + err);
+                        }
+                        else AppendToPage("Copied page content to clipboard.");
+                    }
 #else
-						for (size_t i = start; i < end; ++i)
-						{
-							combined += pageData.pageContent[i];
-							if (i + 1 < end) combined += "\n";
-						}
+                    for (size_t i = start; i < end; ++i)
+                    {
+                        combined += pageData.pageContent[i];
+                        if (i + 1 < end) combined += "\n";
+                    }
 
-						auto copy_to_clipboard = [&combined](bool wl_copy) -> bool
-							{
-								FILE* pipe = popen(
-									(wl_copy 
-										? "wl-copy 2>/dev/null" 
-										: "xclip -selection clipboard 2>/dev/null"),
-										"w");
-								if (!pipe) return false;
+                    if (combined.empty())
+                    {
+                        AppendToPage("ERROR: Failed to copy page content to clipboard because page content was empty!");
+                    }
+                    else
+                    {
+                        auto copy_to_clipboard = [&combined](bool wl_copy) -> bool
+                            {
+                                FILE* pipe = popen(
+                                    (wl_copy 
+                                        ? "wl-copy 2>/dev/null" 
+                                        : "xclip -selection clipboard 2>/dev/null"),
+                                        "w");
+                                if (!pipe) return false;
 
-								size_t written = fwrite(
-									combined.data(),
-									1,
-									combined.size(),
-									pipe);
+                                size_t written = fwrite(
+                                    combined.data(),
+                                    1,
+                                    combined.size(),
+                                    pipe);
 
-								return pclose(pipe) == 0
-									&& written == combined.size();
-							};
+                                return pclose(pipe) == 0
+                                    && written == combined.size();
+                            };
 
-						if (copy_to_clipboard(true)
-							|| copy_to_clipboard(false))
-						{
-							AppendToPage("Copied page content to clipboard.");
-						}
-						else AppendToPage(
-							"ERROR: Failed to copy page content to clipboard because "
-							"'wl-copy' and 'xclip' failed to run!");
+                        if (copy_to_clipboard(true)
+                            || copy_to_clipboard(false))
+                        {
+                            AppendToPage("Copied page content to clipboard.");
+                        }
+                        else AppendToPage(
+                            "ERROR: Failed to copy page content to clipboard because "
+                            "'wl-copy' and 'xclip' failed to run!");
+                    }
 #endif
-					}
                 }
             }
             else if (cmd == cmdExit
@@ -955,7 +1061,7 @@ namespace KalaCLI
         {
             AppendToPage(
                 "ERROR: Failed to add command because its name '" 
-                + string(command.primaryParam) + "' is used by a KalaCLI TUI command!");
+                + string(command.primaryParam) + "' is used by a KalaCLI CLI command!");
 
             return;
         }
@@ -1136,7 +1242,12 @@ namespace KalaCLI
 
         auto count_wrapped_lines = [&](const string& src) -> int
             {
-                if (src.empty()) return 1;
+                if (src.empty()
+                    || !pageData.isWrapped)
+                {
+                    return 1;
+                }
+
                 int c = 0;
                 size_t start = 0;
                 while (start < src.size())
@@ -1321,9 +1432,23 @@ namespace KalaCLI
                             }
                         }
 
+                        u32 topRange{};
+                        u32 bottomRange{};
+
+                        if (pageData.pageScrollRange.first < pageData.innerPageH
+                            && pageData.pageScrollRange.second
+                            < pageData.innerPageH - pageData.pageScrollRange.first)
+                        {
+                            topRange = pageData.pageScrollRange.first;
+                            bottomRange = pageData.pageScrollRange.second;
+                        }
+
+                        u32 scrollHeight = pageData.innerPageH - topRange - bottomRange;
+                        u32 maxTop = scast<u32>(max(0, total - (int)scrollHeight));
+
                         if (!coreData.inPageMode)
                         {
-                            pageData.pageTop = max(0, total - (int)pageData.innerPageH);
+                            pageData.pageTop = maxTop;
                             pageData.pageSelection = max(0, total - 1);
                         }
                         else
@@ -1331,44 +1456,63 @@ namespace KalaCLI
                             pageData.pageTop = clamp(
 								pageData.pageTop,
 								0u,
-								scast<u32>(max(0, total - (int)pageData.innerPageH)));
+								maxTop);
                             pageData.pageSelection = clamp(
 								pageData.pageSelection,
 								0u,
 								scast<u32>(max(0, total - 1)));
+
                             if (pageData.pageSelection < pageData.pageTop)
-							{
-								pageData.pageTop = pageData.pageSelection;
-							}
-                            if (pageData.pageSelection >= pageData.pageTop + (int)pageData.innerPageH)
-							{
-								pageData.pageTop = pageData.pageSelection - pageData.innerPageH + 1;
-							}
+                            {
+                                pageData.pageTop = pageData.pageSelection;
+                            }
+                            if (pageData.pageSelection >= pageData.pageTop + scrollHeight)
+                            {
+                                pageData.pageTop = pageData.pageSelection - scrollHeight + 1;
+                            }
+
+                            pageData.pageTop = min(pageData.pageTop, maxTop);
                         }
 
-                        vector<string> wrapped{};
-                        wrapped.reserve(pageData.innerPageH);
+                        pageData.renderedPageContent.clear();
+                        pageData.renderedPageContent.reserve(scrollHeight);
+
+                        u32 visibleStart = pageData.pageTop;
+                        u32 visibleEnd = visibleStart + scrollHeight;
 
                         {
                             lock_guard<mutex> lock(coreData.externalMutex);
-                            u32 absIdx{}; //absolute wrapped index
-                            for (u32 i = 0; i < pageData.pageCount && wrapped.size() < pageData.innerPageH; ++i)
+                            u32 absIdx{}; //absolute rendered index
+                            for (u32 i = 0; i < pageData.pageCount && pageData.renderedPageContent.size() < scrollHeight; ++i)
                             {
                                 const string& src = pageData.pageContent[(pageData.pageHead + i) % MAX_PAGE_LINES];
                                 if (src.empty())
                                 {
-                                    if (absIdx >= pageData.pageTop
-                                        && absIdx < pageData.pageTop + pageData.innerPageH)
+                                    if (absIdx >= visibleStart
+                                        && absIdx < visibleEnd)
                                     {
-                                        wrapped.push_back("");    
+                                        pageData.renderedPageContent.push_back({ "", i });    
                                     }
+                                    absIdx++;
+                                    continue;
+                                }
+
+                                //wrapping disabled: one page entry = one displayed row
+                                if (!pageData.isWrapped)
+                                {
+                                    if (absIdx >= visibleStart
+                                        && absIdx < visibleEnd)
+                                    {
+                                        pageData.renderedPageContent.push_back({ src, i }); 
+                                    }
+
                                     absIdx++;
                                     continue;
                                 }
 
                                 size_t start{};
                                 while (start < src.size()
-                                    && wrapped.size() < pageData.innerPageH)
+                                    && pageData.renderedPageContent.size() < scrollHeight)
                                 {
                                     string out{};
                                     size_t remaining = src.size() - start;
@@ -1411,38 +1555,65 @@ namespace KalaCLI
                                         }
                                     }
 
-                                    if (absIdx >= pageData.pageTop
-                                        && absIdx < pageData.pageTop + pageData.innerPageH)
+                                    if (absIdx >= visibleStart
+                                        && absIdx < visibleEnd)
                                     {
-                                        wrapped.push_back(out);
+                                        pageData.renderedPageContent.push_back({ out, i }); 
                                     }
                                     absIdx++;
-                                    if (absIdx >= pageData.pageTop + pageData.innerPageH
-                                        && wrapped.size() >= pageData.innerPageH)
+                                    if (absIdx >= visibleEnd
+                                        && pageData.renderedPageContent.size() >= scrollHeight)
                                     {
                                         break;
                                     }
                                 }
 
-                                if (absIdx >= pageData.pageTop + pageData.innerPageH) break;
+                                if (absIdx >= visibleEnd) break;
                             }
                         }
 
                         for (u32 i = 0; i < pageData.innerPageH; ++i)
                         {
-                            string line = (i < wrapped.size())
-                                ? wrapped[i]
+                            bool inScrollRegion = i >= topRange
+                                && i < pageData.innerPageH - bottomRange;
+
+                            u32 contentIndex = inScrollRegion ? i - topRange : 0;
+
+                            string line = (inScrollRegion
+                                && contentIndex < pageData.renderedPageContent.size())
+                                ? pageData.renderedPageContent[contentIndex].first
                                 : "";
 
-                            if (line.size() < coreData.innerW) line += string(coreData.innerW - line.size(), ' ');
+                            //apply persistent row overrides
+                            {
+                                lock_guard<mutex> lock(coreData.externalMutex);
+
+                                for (const OverwrittenRow& row : pageData.overwrittenRows)
+                                {
+                                    //ignore rows outside the current visible area
+                                    if (row.row >= pageData.innerPageH) continue;
+
+                                    u32 targetRow = row.direction == PageDirection::D_UP
+                                        ? pageData.innerPageH - 1 - row.row
+                                        : row.row;
+
+                                    if (targetRow == i) line = row.content;
+                                }
+                            }
+
+                            if (line.size() < coreData.innerW)
+                            {
+                                line += string(coreData.innerW - line.size(), ' ');
+                            }
                             else if (line.size() > coreData.innerW)
                             {
                                 if (coreData.innerW >= 3) line = line.substr(0, coreData.innerW - 3) + "...";
                                 else line = line.substr(0, coreData.innerW);
                             }
 
-                            u32 absRow = pageData.pageTop + i;
+                            u32 absRow = pageData.pageTop + contentIndex;
                             if (coreData.inPageMode
+                                && inScrollRegion
                                 && absRow == pageData.pageSelection)
                             {
                                 coreData.frame << "\n│\x1b[7m" << line << "\x1b[0m│";
@@ -1510,7 +1681,7 @@ namespace KalaCLI
                     ? coreData.innerW - visibleText.size()
                     : 0;
 
-                //snap cursor to where page view box stopped + wrap still disabled
+                //snap cursor to where page box stopped + wrap still disabled
                 coreData.frame << "\x1b[" << inputStartRow << ";1H";
 
                 //top border
@@ -1540,8 +1711,6 @@ namespace KalaCLI
 
         auto handle_input_char = [&](u32 c) -> void
             {
-                u32 innerW = scast<u32>(totalSize.x) - 2;
-
                 ALLOWED_KEY key = scast<ALLOWED_KEY>(c);
 
                 if (key == ALLOWED_KEY::KEY_TAB)
@@ -1569,101 +1738,38 @@ namespace KalaCLI
                         && pageData.pageSelection > 0)
                     {
                         pageData.pageSelection--;
-                        if (pageData.pageSelection < pageData.pageTop) pageData.pageTop = pageData.pageSelection;
                     }
-                    else if (key == ALLOWED_KEY::KEY_ARROW_DOWN)
+                    else if (key == ALLOWED_KEY::KEY_ARROW_DOWN
+                        && (int)pageData.pageSelection < total - 1)
                     {
-                        if ((int)pageData.pageSelection < total - 1)
-                        {
-                            pageData.pageSelection++;
-                            if (pageData.pageSelection >= pageData.pageTop + pageData.innerPageH) pageData.pageTop++;
-                        }
+                        pageData.pageSelection++;
                     }
                     else if (key == ALLOWED_KEY::KEY_CARRIAGE_RETURN
                         || key == ALLOWED_KEY::KEY_LINE_FEED)
                     {
-                        string toCopy{};
+                        u32 highlightedRow = GetHighlightedRow(TextRange::R_VISIBLE);
+                        string highlightedtext{};
                         {
                             lock_guard<mutex> lock(coreData.externalMutex);
-                            u32 absIdx{}; //absolute wrapped index
-                            for (u32 i = 0; i < pageData.pageCount; ++i)
+
+                            if (highlightedRow < pageData.renderedPageContent.size())
                             {
-                                const string& src = pageData.pageContent[(pageData.pageHead + i) % MAX_PAGE_LINES];
-                                if (src.empty())
-                                {
-                                    if (absIdx == pageData.pageSelection)
-                                    {
-                                        toCopy = "";
-                                        break;    
-                                    }
-                                    absIdx++;
-                                    continue;
-                                }
-
-                                size_t start{};
-                                while (start < src.size())
-                                {
-                                    string out{};
-                                    size_t remaining = src.size() - start;
-                                    if (remaining <= innerW)
-                                    {
-                                        out = src.substr(start);
-                                        start = src.size();
-                                    }
-                                    else
-                                    {
-                                        size_t searchLimit = start + innerW;
-                                        size_t spacePos = src.rfind(' ', searchLimit);
-                                        if (spacePos != string::npos
-                                            && spacePos > start
-                                            && spacePos < searchLimit)
-                                        {
-                                            out = src.substr(start, spacePos - start);
-                                            start = spacePos + 1;
-                                            while (start < src.size()
-                                                && src[start] == ' ')
-                                            {
-                                                ++start;
-                                            }
-                                        }
-                                        else
-                                        {
-                                            string chunk = src.substr(start, innerW);
-                                            bool hasMore = (start + innerW) < src.size();
-                                            if (hasMore
-                                                && innerW >= 3)
-                                            {
-                                                out = chunk.substr(0, innerW - 3) + "...";
-                                                start = src.size();
-                                            }
-                                            else
-                                            {
-                                                out = chunk;
-                                                start += innerW;
-                                            }
-                                        }
-                                    }
-
-                                    if (absIdx == pageData.pageSelection)
-                                    {
-                                        toCopy = out;
-                                        break;
-                                    }
-                                    absIdx++;
-                                }
-
-                                if (absIdx >= pageData.pageSelection) break;
+                                highlightedtext = pageData.renderedPageContent[highlightedRow].first;
                             }
                         }
 
-						if (inputData.typedText.empty())
-						{
-							ForceClose("a", "b");
-						}
-
-                        inputData.typedText = toCopy;
-                        coreData.cursorPos = inputData.typedText.size();
-                        coreData.inPageMode = false;
+                        if (!highlightedRowEnterAction)
+                        {
+                            inputData.typedText = highlightedtext;
+                            coreData.cursorPos = inputData.typedText.size();
+                            coreData.inPageMode = false;
+                        }
+                        else
+                        {
+                            highlightedRowEnterAction(
+                                highlightedRow,
+                                highlightedtext);
+                        }
                     }
 
                     return;
