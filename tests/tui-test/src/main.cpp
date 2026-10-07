@@ -21,17 +21,15 @@ using std::this_thread::sleep_for;
 
 static void PrefixlessAction(string& message)
 {
-    KalaCLICore::AppendToPage("user message: " + message);
+    //KalaCLICore::AppendToPage("user message: " + message);
 }
 
 int main()
 {
-    /*
     KalaCLICore::SetPrefixlessInputAction([](string& msg)
         { 
             PrefixlessAction(msg);
         });
-    */
 
     KalaCLICore::AddCommand(
         {

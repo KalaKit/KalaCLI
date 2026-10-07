@@ -60,10 +60,6 @@ namespace KalaCLI
 	class LIB_API KalaCLICore
 	{
 	public:
-		static bool GetWrapState();
-		//Toggles page view text wrapping on and off, defaults to true
-		static void SetWrapState(bool state);
-
 		//Resolve origin relative to target,
 		//origin row is ignored if origin range is R_HIGHLIGHTED_ROW,
 		//target range cannot be same as origin range or R_HIGHLIGHTED_ROW
@@ -77,16 +73,21 @@ namespace KalaCLI
 		static u32 GetRowSize();
 		//Returns row count in page visible area
 		static u32 GetRowCount();
-		//Returns the global and visible range row which is currently highlighted,
-		//returns { 0, 0 } if not in page view mode
-		static pair<u32, u32> GetHighlightedRow();
-		//Returns the column the cursor is currently at in page view
+		//Returns the global or visible range row depending on text range state,
+		//cannot be used with R_HIGHLIGHTED_ROW,
+		//returns 0 if not in page view mode
+		static u32 GetHighlightedRow(TextRange textRange);
+		//Returns the column the cursor is currently at if in page view
 		static u32 GetHighlightedColumn();
 
 		static bool CanConsoleWriteToPage();
 		//Should new log messages be appended at the bottom of existing page content,
 		//if disabled then console only allows to draw what the current page contains
 		static void SetConsoleWritesToPageState(bool state);
+
+		static bool GetWrapState();
+		//Toggles page view text wrapping on and off, defaults to true
+		static void SetWrapState(bool state);
 
 		//Choose which rows from top and bottom count as scrollable area,
 		//rows in between scroll range count as final scrollable area
@@ -99,7 +100,10 @@ namespace KalaCLI
 		static void SetPageTitle(string_view title);
 
 		//Returns all page content if text range is set to R_ALL,
-		//otherwise returns page content within visible range
+		//returns all page content within visible page view box area
+		//if text range is set to R_VISIBLE,
+		//returns content on highlighted row if in page view mode
+		//and if text range is set to R_HIGHLIGHTED_ROW
 		static const vector<string>& GetPageContent(TextRange textRange = TextRange::R_ALL);
 		//Decide what to display in the active page,
 		//does not allow to exceed MAX_PAGE_LINES,
@@ -112,15 +116,14 @@ namespace KalaCLI
 		//Creates a new row after the last row and writes to it,
 		//or overwrites last row if row count is maxed out
 		static void AppendToPage(string_view content);
+		
 		//Overwrites specific row within visible page area if text range is R_VISIBLE,
 		//otherwise overwrites text within full page context.
 		//Ignores page direction and target row if text range is R_HIGHLIGHTED_ROW.
 		//If page direction is up then counts down from top row,
 		//if page direction is down then counts up from bottom row,
 		//target row is the row which will be overwritten.
-		//Does not need to be called every frame unless content on the same row changes,
-		//like for example if scroll range changes within page view box
-		//and text range was set to R_VISIBLE or R_HIGHLIGHTED_ROW
+		//Does not need to be called every frame unless content on the same row changes
 		static void OverwriteRow(
 			const string& content,
 			TextRange textRange,

@@ -56,6 +56,7 @@ using std::string;
 using std::string_view;
 using std::vector;
 using std::array;
+using std::pair;
 using std::min;
 using std::max;
 using std::clamp;
@@ -110,8 +111,11 @@ struct CoreData
 struct PageViewBoxData
 {
 	atomic<bool> canConsoleWriteToPage{};
+    bool isWrapped{};
 
 	string pageTitle{};
+
+    pair<u32, u32> pageScrollRange{};
 
 	u32 innerPageH{};
 	u32 pageTop{}; //absolute wrapped line that is at row 0 of innerPageH
@@ -496,8 +500,37 @@ namespace KalaCLI
             }
         });
 
+    u32 KalaCLICore::ResolveRow(
+        TextRange originRange,
+        u32 originRow,
+        TextRange targetRange,
+        u32 targetRow)
+    {
+
+    }
+
+    u32 KalaCLICore::GetRowSize() { return coreData.innerW; }
+    u32 KalaCLICore::GetRowCount() {  }
+    u32 KalaCLICore::GetHighlightedRow(TextRange textRange)
+    {
+
+    }
+    u32 KalaCLICore::GetHighlightedColumn() {  }
+
     bool KalaCLICore::CanConsoleWriteToPage() { return pageData.canConsoleWriteToPage.load(); }
     void KalaCLICore::SetConsoleWritesToPageState(bool state) { pageData.canConsoleWriteToPage.store(state); }
+
+    bool KalaCLICore::GetWrapState() { return pageData.isWrapped; }
+    void KalaCLICore::SetWrapState(bool state)
+    {
+        pageData.isWrapped = state;
+        AppendToPage("Set wrapped mode to '" + string(pageData.isWrapped ? "true" : "false") + "'.");
+    }
+
+    void KalaCLICore::SetPageScrollRange(pair<u32, u32> range)
+    {
+
+    }
 
     void KalaCLICore::SetPageTitle(string_view title)
     {
@@ -510,6 +543,10 @@ namespace KalaCLI
         pageData.pageTitle = title;
     }
 
+    const vector<string>& KalaCLICore::GetPageContent(TextRange textRange)
+    {
+
+    }
     void KalaCLICore::SetPageContent(
 		const vector<string>& content,
 		TextRange textRange)
@@ -538,6 +575,7 @@ namespace KalaCLI
             pageData.pageContent[i] = content[i];
         }
     }
+    
     void KalaCLICore::AppendToPage(string_view line)
     {
         lock_guard<mutex> lock(coreData.externalMutex);
@@ -551,6 +589,15 @@ namespace KalaCLI
             pageData.pageContent[pageData.pageHead] = line;
             pageData.pageHead = (pageData.pageHead + 1) % MAX_PAGE_LINES;
         }
+    }
+
+    void KalaCLICore::OverwriteRow(
+        const string& content,
+        TextRange textRange,
+        PageDirection pageDirection,
+        u32 targetRow)
+    {
+
     }
 
     void KalaCLICore::SetHighlightedRowEnterAction(function<void(u32, u32, string&)> action)
