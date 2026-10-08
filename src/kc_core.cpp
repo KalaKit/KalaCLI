@@ -121,6 +121,7 @@ struct PageViewBoxData
 {
 	atomic<bool> canConsoleWriteToPage{};
     bool isWrapped{};
+    bool hasAppendedConsoleText{};
 
 	string pageTitle{};
 
@@ -660,6 +661,8 @@ namespace KalaCLI
             pageData.pageContent[pageData.pageHead] = line;
             pageData.pageHead = (pageData.pageHead + 1) % MAX_PAGE_LINES;
         }
+
+        if (pageData.canConsoleWriteToPage) pageData.hasAppendedConsoleText = true;
     }
 
     void KalaCLICore::OverwriteRow(
@@ -1446,10 +1449,14 @@ namespace KalaCLI
                         u32 scrollHeight = pageData.innerPageH - topRange - bottomRange;
                         u32 maxTop = scast<u32>(max(0, total - (int)scrollHeight));
 
-                        if (!coreData.inPageMode)
+                        if (pageData.hasAppendedConsoleText)
                         {
-                            pageData.pageTop = maxTop;
-                            pageData.pageSelection = max(0, total - 1);
+                            if (!coreData.inPageMode)
+                            {
+                                pageData.pageTop = maxTop;
+                                pageData.pageSelection = max(0, total - 1);
+                            }
+                            pageData.hasAppendedConsoleText = false;
                         }
                         else
                         {
