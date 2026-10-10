@@ -18,7 +18,6 @@
 #include <csignal>
 #include <cstdio>
 #include <cerrno>
-#include <term.h>
 #endif
 
 #include "log_utils.hpp"
@@ -66,7 +65,6 @@ using std::max;
 using std::clamp;
 using std::cout;
 using std::cerr;
-using std::flush;
 using std::atexit;
 using std::chrono::steady_clock;
 using std::chrono::milliseconds;
@@ -130,6 +128,7 @@ struct PageViewBoxData
 	atomic<bool> canConsoleWriteToPage{};
     bool isWrapped{};
     bool hasAppendedConsoleText{};
+    bool hasWrittenCommand{};
 
 	string pageTitle{};
 
@@ -470,9 +469,9 @@ namespace KalaCLI
         {
         default:
         case TextRange::R_ALL:
-            return coreData.cursorPos;
+            return pageData.pageSelection;
         case TextRange::R_VISIBLE:
-            return coreData.cursorPos - pageData.pageTop;
+            return pageData.pageSelection - pageData.pageTop;
         case TextRange::R_HIGHLIGHTED_ROW:
             return 0;
         }
@@ -1263,7 +1262,27 @@ namespace KalaCLI
                     return false;
                 }
 #else
-                
+                fflush(stdout);
+
+                int capturedOut = dup(STDOUT_FILENO);
+                if (capturedOut == -1) return false;
+
+                if (dup2(coreData.real_out, STDOUT_FILENO) == -1)
+                {
+                    close(capturedOut);
+                    return false;
+                }
+
+                int result = system("clear");
+
+                bool restored = dup2(capturedOut, STDOUT_FILENO) != -1;
+                close(capturedOut);
+
+                if (!restored
+                    || result != 0)
+                {
+                    return false;
+                }
 #endif
                 return true;
             };
@@ -1526,6 +1545,8 @@ namespace KalaCLI
                             inputData.typedTextHistory[inputData.typedTextHead] = inputData.typedText;
                             inputData.typedTextHead = (inputData.typedTextHead + 1) % MAX_TYPED_TEXT_HISTORY;
                         }
+
+                        pageData.hasWrittenCommand = true;
                     }
 
                     SendCommand(inputData.typedText);
@@ -1725,14 +1746,17 @@ namespace KalaCLI
                         u32 scrollHeight = pageData.innerPageH - topRange - bottomRange;
                         u32 maxTop = scast<u32>(max(0, total - (int)scrollHeight));
 
-                        if (pageData.hasAppendedConsoleText)
+                        if (pageData.hasAppendedConsoleText
+                            || pageData.hasWrittenCommand)
                         {
-                            if (!coreData.inPageMode)
+                            if (pageData.hasWrittenCommand
+                                || !coreData.inPageMode)
                             {
                                 pageData.pageTop = maxTop;
                                 pageData.pageSelection = max(0, total - 1);
                             }
                             pageData.hasAppendedConsoleText = false;
+                            pageData.hasWrittenCommand = false;
                         }
                         else
                         {
