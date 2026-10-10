@@ -87,10 +87,16 @@ struct CoreData
 	string lastFrame{};
 	bool hasReservedLastFrame{};
 
+    vec2 lastSize{};
+
 	ostringstream frame{};
 	bool hasReservedFrame{};
 
 	bool inPageMode{};
+
+    bool isResizeDirty = true;
+    bool isInputDirty = true;
+    bool isUserTextUpdateDirty = true;
 
 	u32 cursorPos{};
 	u32 innerW{};
@@ -148,7 +154,6 @@ struct InputBoxData
 	u32 inputScrollOffset{};
 
 	string typedText{};
-	string nextFrameText{};
 
 	array<string, MAX_TYPED_TEXT_HISTORY> typedTextHistory{};
 	u32 typedTextCount{}; //valid entries
@@ -543,6 +548,8 @@ namespace KalaCLI
     {
         pageData.isWrapped = state;
         AppendToPage("Set wrapped mode to '" + string(pageData.isWrapped ? "true" : "false") + "'.");
+
+        coreData.isUserTextUpdateDirty = true;
     }
 
     void KalaCLICore::SetPageScrollRange(pair<u32, u32> range)
@@ -561,6 +568,8 @@ namespace KalaCLI
             "Set page scroll range to '" 
             + to_string(pageData.pageScrollRange.first) + ", " 
             + to_string(pageData.pageScrollRange.second) + "'.");
+
+        coreData.isUserTextUpdateDirty = true;
     }
 
     void KalaCLICore::SetPageTitle(string_view title)
@@ -572,6 +581,8 @@ namespace KalaCLI
         }
 
         pageData.pageTitle = title;
+
+        coreData.isUserTextUpdateDirty = true;
     }
 
     vector<string> KalaCLICore::GetPageContent(TextRange textRange)
@@ -640,6 +651,8 @@ namespace KalaCLI
         {
             pageData.pageContent[i] = content[i];
         }
+
+        coreData.isUserTextUpdateDirty = true;
     }
     
     void KalaCLICore::AppendToPage(string_view line)
@@ -663,6 +676,8 @@ namespace KalaCLI
         }
 
         if (pageData.canConsoleWriteToPage) pageData.hasAppendedConsoleText = true;
+
+        coreData.isUserTextUpdateDirty = true;
     }
 
     void KalaCLICore::OverwriteRow(
@@ -687,6 +702,9 @@ namespace KalaCLI
             {
                 if (content.empty()) pageData.overwrittenRows.erase(it);
                 else                 it->content = content;
+
+                coreData.isUserTextUpdateDirty = true;
+
                 return;
             }
         }
@@ -699,7 +717,9 @@ namespace KalaCLI
                     .row = targetRow,
                     .direction = pageDirection
                 });
-        } 
+        }
+
+        coreData.isUserTextUpdateDirty = true;
     }
 
     void KalaCLICore::SetHighlightedRowEnterAction(function<void(u32, string&)> action)
@@ -1029,10 +1049,8 @@ namespace KalaCLI
         }
         else
         {
-            if (prefixlessInputAction) prefixlessInputAction(inputData.nextFrameText);
+            if (prefixlessInputAction) prefixlessInputAction(inputData.typedText);
         }
-
-        inputData.nextFrameText.clear();
     }
 
     void KalaCLICore::AddCommand(Command&& command)
@@ -1211,6 +1229,12 @@ namespace KalaCLI
 
         vec2 totalSize = get_console_size();
 
+        if (coreData.lastSize != totalSize)
+        {
+            coreData.lastSize = totalSize;
+            coreData.isResizeDirty = true;
+        }
+
         if (totalSize.x < WIDTH_MIN
             || totalSize.y < HEIGHT_MIN)
         {
@@ -1238,10 +1262,6 @@ namespace KalaCLI
 
             return;
         }
-
-        if (!inputData.nextFrameText.empty()) SendCommand(inputData.nextFrameText);
-
-        StartDrawCapture(true);
 
         auto count_wrapped_lines = [&](const string& src) -> int
             {
@@ -1295,6 +1315,213 @@ namespace KalaCLI
                 return c;
             };
 
+        auto handle_input_char = [&](u32 c) -> void
+            {
+                ALLOWED_KEY key = scast<ALLOWED_KEY>(c);
+
+                if (key == ALLOWED_KEY::KEY_TAB)
+                {
+                    coreData.inPageMode = !coreData.inPageMode;
+
+                    coreData.isInputDirty = true;
+
+                    return;
+                }
+
+                //
+                // PAGE READ MODE
+                //
+
+                if (coreData.inPageMode)
+                {
+                    int total = scast<int>(pageData.pageCount);
+                    if (pageData.isWrapped)
+                    {
+                        total = 0;
+                        lock_guard<mutex> lock(coreData.externalMutex);
+                        for (u32 i = 0; i < pageData.pageCount; ++i)
+                        {
+                            total += count_wrapped_lines(pageData.pageContent[(pageData.pageHead + i) % MAX_PAGE_LINES]);
+                        }
+                    }
+
+                    if (key == ALLOWED_KEY::KEY_ARROW_UP
+                        && pageData.pageSelection > 0)
+                    {
+                        pageData.pageSelection--;
+
+                        coreData.isInputDirty = true;
+                    }
+                    else if (key == ALLOWED_KEY::KEY_ARROW_DOWN
+                        && (int)pageData.pageSelection < total - 1)
+                    {
+                        pageData.pageSelection++;
+
+                        coreData.isInputDirty = true;
+                    }
+                    else if (key == ALLOWED_KEY::KEY_CARRIAGE_RETURN
+                        || key == ALLOWED_KEY::KEY_LINE_FEED)
+                    {
+                        u32 highlightedRow = GetHighlightedRow(TextRange::R_VISIBLE);
+                        string highlightedtext{};
+                        {
+                            lock_guard<mutex> lock(coreData.externalMutex);
+
+                            if (highlightedRow < pageData.renderedPageContent.size())
+                            {
+                                highlightedtext = pageData.renderedPageContent[highlightedRow].first;
+                            }
+                        }
+
+                        if (!highlightedRowEnterAction)
+                        {
+                            inputData.typedText = highlightedtext;
+                            coreData.cursorPos = inputData.typedText.size();
+                            coreData.inPageMode = false;
+                        }
+                        else
+                        {
+                            highlightedRowEnterAction(
+                                highlightedRow,
+                                highlightedtext);
+                        }
+
+                        coreData.isInputDirty = true;
+                    }
+
+                    return;
+                }
+
+                //
+                // INPUT MODE 
+                //
+
+                //printable character
+                if (!coreData.inPageMode
+                    && c >= 32
+                    && c <= 126)
+                {
+                    if (inputData.typedText.size() < MAX_INPUT_LENGTH)
+                    {
+                        inputData.typedText.insert(inputData.typedText.begin() + coreData.cursorPos, c);
+                        coreData.cursorPos++;
+                        inputData.typedHistoryPos = inputData.typedTextCount > 0
+                            ? (int)inputData.typedTextCount - 1
+                            : -1;
+                    }
+
+                    coreData.isInputDirty = true;
+
+                    return;
+                }
+
+                if (key == ALLOWED_KEY::KEY_ARROW_LEFT
+                    && coreData.cursorPos > 0)
+                {
+                    coreData.cursorPos--;
+
+                    coreData.isInputDirty = true;
+                }
+                else if (key == ALLOWED_KEY::KEY_ARROW_RIGHT
+                    && coreData.cursorPos < inputData.typedText.size())
+                {
+                    coreData.cursorPos++;
+
+                    coreData.isInputDirty = true;
+                }
+                else if (key == ALLOWED_KEY::KEY_ARROW_UP)
+                {
+                    if (inputData.typedTextCount == 0) return;
+
+                    if (inputData.typedText.empty()
+                        || inputData.typedHistoryPos == -1)
+                    {
+                        inputData.typedHistoryPos = (int)inputData.typedTextCount - 1;
+                    }
+                    else
+                    {
+                        --inputData.typedHistoryPos;
+                        if (inputData.typedHistoryPos < 0) inputData.typedHistoryPos = (int)inputData.typedTextCount - 1;
+                    }
+
+                    inputData.typedText = inputData.typedTextHistory[
+						(inputData.typedTextHead + (u32)inputData.typedHistoryPos) 
+						% MAX_TYPED_TEXT_HISTORY];
+                    coreData.cursorPos = inputData.typedText.size();
+
+                    coreData.isInputDirty = true;
+                }
+                else if (key == ALLOWED_KEY::KEY_ARROW_DOWN)
+                {
+                    if (inputData.typedTextCount == 0) return;
+
+                    if (inputData.typedText.empty()
+                        || inputData.typedHistoryPos == -1)
+                    {
+                        inputData.typedHistoryPos = 0;
+                    }
+                    else
+                    {
+                        ++inputData.typedHistoryPos;
+                        if (inputData.typedHistoryPos >= (int)inputData.typedTextCount) inputData.typedHistoryPos = 0;
+                    }
+
+                    inputData.typedText = inputData.typedTextHistory[
+						(inputData.typedTextHead + (u32)inputData.typedHistoryPos) 
+						% MAX_TYPED_TEXT_HISTORY];
+                    coreData.cursorPos = inputData.typedText.size();
+
+                    coreData.isInputDirty = true;
+                }
+                else if (key == ALLOWED_KEY::KEY_CARRIAGE_RETURN
+                    || key == ALLOWED_KEY::KEY_LINE_FEED)
+                {
+                    if (!inputData.typedText.empty())
+                    {
+                        if (inputData.typedTextCount < MAX_TYPED_TEXT_HISTORY)
+                        {
+                            inputData.typedTextHistory[
+								(inputData.typedTextHead + inputData.typedTextCount) 
+								% MAX_TYPED_TEXT_HISTORY] = inputData.typedText;
+                            ++inputData.typedTextCount;
+                        }
+                        else
+                        {
+                            inputData.typedTextHistory[inputData.typedTextHead] = inputData.typedText;
+                            inputData.typedTextHead = (inputData.typedTextHead + 1) % MAX_TYPED_TEXT_HISTORY;
+                        }
+                    }
+
+                    SendCommand(inputData.typedText);
+
+                    inputData.typedText.clear();
+                    coreData.cursorPos = 0;
+					inputData.inputScrollOffset = 0;
+                    inputData.typedHistoryPos = inputData.typedTextCount > 0
+                        ? (int)inputData.typedTextCount - 1
+                        : -1;
+
+                    coreData.isInputDirty = true;
+                }
+                else if ((key == ALLOWED_KEY::KEY_BACKSPACE
+                    || key == ALLOWED_KEY::KEY_DELETE)
+                    && coreData.cursorPos > 0
+                    && !inputData.typedText.empty())
+                {
+                    inputData.typedText.erase(coreData.cursorPos - 1, 1);
+                    coreData.cursorPos--;
+                    inputData.typedHistoryPos = inputData.typedTextCount > 0
+                        ? (int)inputData.typedTextCount - 1
+                        : -1;
+
+                    coreData.isInputDirty = true;
+                }
+            };
+
+        if (u32 c = GetPushedKey()) handle_input_char(c);
+
+        StartDrawCapture(true);
+
         if (!coreData.hasReservedFrame)
         {
             coreData.frame.str().reserve(65536);
@@ -1307,6 +1534,14 @@ namespace KalaCLI
                 u32 h = scast<u32>(totalSize.y);
 
                 u32 pageH = h - 3; //dont draw in bottom three rows
+
+                if (!coreData.isResizeDirty
+                    && !coreData.isInputDirty
+                    && !coreData.isUserTextUpdateDirty)
+                {
+                    return pageH + 1;
+                }
+
                 coreData.innerW = w - 2;
                 pageData.innerPageH = pageH - 2;
 
@@ -1426,8 +1661,10 @@ namespace KalaCLI
 
                 auto draw_middle = [&]() -> void
                     {
-                        int total{};
+                        int total = scast<int>(pageData.pageCount);
+                        if (pageData.isWrapped)
                         {
+                            total = 0;
                             lock_guard<mutex> lock(coreData.externalMutex);
                             for (u32 i = 0; i < pageData.pageCount; ++i)
                             {
@@ -1489,8 +1726,9 @@ namespace KalaCLI
 
                         {
                             lock_guard<mutex> lock(coreData.externalMutex);
-                            u32 absIdx{}; //absolute rendered index
-                            for (u32 i = 0; i < pageData.pageCount && pageData.renderedPageContent.size() < scrollHeight; ++i)
+                            u32 firstRow = pageData.isWrapped ? 0 : visibleStart;
+                            u32 absIdx = firstRow; //absolute rendered index
+                            for (u32 i = firstRow; i < pageData.pageCount && pageData.renderedPageContent.size() < scrollHeight; ++i)
                             {
                                 const string& src = pageData.pageContent[(pageData.pageHead + i) % MAX_PAGE_LINES];
                                 if (src.empty())
@@ -1521,43 +1759,30 @@ namespace KalaCLI
                                 while (start < src.size()
                                     && pageData.renderedPageContent.size() < scrollHeight)
                                 {
-                                    string out{};
+                                    size_t end{};
                                     size_t remaining = src.size() - start;
-                                    if (remaining <= coreData.innerW)
-                                    {
-                                        out = src.substr(start);
-                                        start = src.size();
-                                    }
+                                    bool ellipsis{};
+
+                                    if (remaining <= coreData.innerW) end = src.size();
                                     else
                                     {
                                         size_t searchLimit = start + coreData.innerW;
                                         size_t spacePos = src.rfind(' ', searchLimit);
+
                                         if (spacePos != string::npos
                                             && spacePos > start
                                             && spacePos < searchLimit)
                                         {
-                                            out = src.substr(start, spacePos - start);
-                                            start = spacePos + 1;
-                                            while (start < src.size()
-                                                && src[start] == ' ')
-                                            {
-                                                ++start;
-                                            }
+                                            end = spacePos;
                                         }
                                         else
                                         {
-                                            string chunk = src.substr(start, coreData.innerW);
-                                            bool hasMore = (start + coreData.innerW) < src.size();
-                                            if (hasMore
+                                            end = start + coreData.innerW;
+
+                                            if (end < src.size()
                                                 && coreData.innerW >= 3)
                                             {
-                                                out = chunk.substr(0, coreData.innerW - 3) + "...";
-                                                start = src.size();
-                                            }
-                                            else
-                                            {
-                                                out = chunk;
-                                                start += coreData.innerW;
+                                                ellipsis = true;
                                             }
                                         }
                                     }
@@ -1565,9 +1790,29 @@ namespace KalaCLI
                                     if (absIdx >= visibleStart
                                         && absIdx < visibleEnd)
                                     {
-                                        pageData.renderedPageContent.push_back({ out, i }); 
+                                        string out = ellipsis
+                                            ? src.substr(start, coreData.innerW - 3) + "..."
+                                            : src.substr(start, end - start);
+
+                                        pageData.renderedPageContent.push_back({ std::move(out), i });
                                     }
+
+                                    if (ellipsis) start = src.size();
+                                    else if (end < src.size()
+                                        && src[end] == ' ')
+                                    {
+                                        start = end + 1;
+
+                                        while (start < src.size()
+                                            && src[start] == ' ')
+                                        {
+                                            ++start;
+                                        }
+                                    }
+                                    else start = end;
+
                                     absIdx++;
+
                                     if (absIdx >= visibleEnd
                                         && pageData.renderedPageContent.size() >= scrollHeight)
                                     {
@@ -1641,6 +1886,13 @@ namespace KalaCLI
 
         auto draw_input_box = [&]() -> void
             {
+                if (!coreData.isResizeDirty
+                    && !coreData.isInputDirty
+                    && !coreData.isUserTextUpdateDirty)
+                {
+                    return;
+                }
+
                 string horizontalBar{};
                 horizontalBar.reserve(coreData.innerW * 3);
 
@@ -1716,186 +1968,6 @@ namespace KalaCLI
                 coreData.frame << "\x1b[?7h";
             };
 
-        auto handle_input_char = [&](u32 c) -> void
-            {
-                ALLOWED_KEY key = scast<ALLOWED_KEY>(c);
-
-                if (key == ALLOWED_KEY::KEY_TAB)
-                {
-                    coreData.inPageMode = !coreData.inPageMode;
-                    return;
-                }
-
-                //
-                // PAGE READ MODE
-                //
-
-                if (coreData.inPageMode)
-                {
-                    int total{};
-                    {
-                        lock_guard<mutex> lock(coreData.externalMutex);
-                        for (u32 i = 0; i < pageData.pageCount; ++i)
-                        {
-                            total += count_wrapped_lines(pageData.pageContent[(pageData.pageHead + i) % MAX_PAGE_LINES]);
-                        }
-                    }
-
-                    if (key == ALLOWED_KEY::KEY_ARROW_UP
-                        && pageData.pageSelection > 0)
-                    {
-                        pageData.pageSelection--;
-                    }
-                    else if (key == ALLOWED_KEY::KEY_ARROW_DOWN
-                        && (int)pageData.pageSelection < total - 1)
-                    {
-                        pageData.pageSelection++;
-                    }
-                    else if (key == ALLOWED_KEY::KEY_CARRIAGE_RETURN
-                        || key == ALLOWED_KEY::KEY_LINE_FEED)
-                    {
-                        u32 highlightedRow = GetHighlightedRow(TextRange::R_VISIBLE);
-                        string highlightedtext{};
-                        {
-                            lock_guard<mutex> lock(coreData.externalMutex);
-
-                            if (highlightedRow < pageData.renderedPageContent.size())
-                            {
-                                highlightedtext = pageData.renderedPageContent[highlightedRow].first;
-                            }
-                        }
-
-                        if (!highlightedRowEnterAction)
-                        {
-                            inputData.typedText = highlightedtext;
-                            coreData.cursorPos = inputData.typedText.size();
-                            coreData.inPageMode = false;
-                        }
-                        else
-                        {
-                            highlightedRowEnterAction(
-                                highlightedRow,
-                                highlightedtext);
-                        }
-                    }
-
-                    return;
-                }
-
-                //
-                // INPUT MODE 
-                //
-
-                //printable character
-                if (!coreData.inPageMode
-                    && c >= 32
-                    && c <= 126)
-                {
-                    if (inputData.typedText.size() < MAX_INPUT_LENGTH)
-                    {
-                        inputData.typedText.insert(inputData.typedText.begin() + coreData.cursorPos, c);
-                        coreData.cursorPos++;
-                        inputData.typedHistoryPos = inputData.typedTextCount > 0
-                            ? (int)inputData.typedTextCount - 1
-                            : -1;
-                    }
-
-                    return;
-                }
-
-                if (key == ALLOWED_KEY::KEY_ARROW_LEFT
-                    && coreData.cursorPos > 0)
-                {
-                    coreData.cursorPos--;
-                }
-                else if (key == ALLOWED_KEY::KEY_ARROW_RIGHT
-                    && coreData.cursorPos < inputData.typedText.size())
-                {
-                    coreData.cursorPos++;
-                }
-                else if (key == ALLOWED_KEY::KEY_ARROW_UP)
-                {
-                    if (inputData.typedTextCount == 0) return;
-
-                    if (inputData.typedText.empty()
-                        || inputData.typedHistoryPos == -1)
-                    {
-                        inputData.typedHistoryPos = (int)inputData.typedTextCount - 1;
-                    }
-                    else
-                    {
-                        --inputData.typedHistoryPos;
-                        if (inputData.typedHistoryPos < 0) inputData.typedHistoryPos = (int)inputData.typedTextCount - 1;
-                    }
-
-                    inputData.typedText = inputData.typedTextHistory[
-						(inputData.typedTextHead + (u32)inputData.typedHistoryPos) 
-						% MAX_TYPED_TEXT_HISTORY];
-                    coreData.cursorPos = inputData.typedText.size();
-                }
-                else if (key == ALLOWED_KEY::KEY_ARROW_DOWN)
-                {
-                    if (inputData.typedTextCount == 0) return;
-
-                    if (inputData.typedText.empty()
-                        || inputData.typedHistoryPos == -1)
-                    {
-                        inputData.typedHistoryPos = 0;
-                    }
-                    else
-                    {
-                        ++inputData.typedHistoryPos;
-                        if (inputData.typedHistoryPos >= (int)inputData.typedTextCount) inputData.typedHistoryPos = 0;
-                    }
-
-                    inputData.typedText = inputData.typedTextHistory[
-						(inputData.typedTextHead + (u32)inputData.typedHistoryPos) 
-						% MAX_TYPED_TEXT_HISTORY];
-                    coreData.cursorPos = inputData.typedText.size();
-                }
-                else if (key == ALLOWED_KEY::KEY_CARRIAGE_RETURN
-                    || key == ALLOWED_KEY::KEY_LINE_FEED)
-                {
-                    if (!inputData.typedText.empty())
-                    {
-                        inputData.nextFrameText = inputData.typedText;
-
-                        if (inputData.typedTextCount < MAX_TYPED_TEXT_HISTORY)
-                        {
-                            inputData.typedTextHistory[
-								(inputData.typedTextHead + inputData.typedTextCount) 
-								% MAX_TYPED_TEXT_HISTORY] = inputData.typedText;
-                            ++inputData.typedTextCount;
-                        }
-                        else
-                        {
-                            inputData.typedTextHistory[inputData.typedTextHead] = inputData.typedText;
-                            inputData.typedTextHead = (inputData.typedTextHead + 1) % MAX_TYPED_TEXT_HISTORY;
-                        }
-                    }
-
-                    inputData.typedText.clear();
-                    coreData.cursorPos = 0;
-					inputData.inputScrollOffset = 0;
-                    inputData.typedHistoryPos = inputData.typedTextCount > 0
-                        ? (int)inputData.typedTextCount - 1
-                        : -1;
-                }
-                else if ((key == ALLOWED_KEY::KEY_BACKSPACE
-                    || key == ALLOWED_KEY::KEY_DELETE)
-                    && coreData.cursorPos > 0
-                    && !inputData.typedText.empty())
-                {
-                    inputData.typedText.erase(coreData.cursorPos - 1, 1);
-                    coreData.cursorPos--;
-                    inputData.typedHistoryPos = inputData.typedTextCount > 0
-                        ? (int)inputData.typedTextCount - 1
-                        : -1;
-                }
-            };
-
-        if (u32 c = GetPushedKey()) handle_input_char(c);
-
         draw_input_box();
 
         if (!coreData.hasReservedLastFrame)
@@ -1904,17 +1976,32 @@ namespace KalaCLI
             coreData.hasReservedLastFrame = true;
         }
 
-        string thisFrame = std::move(coreData.frame).str();
-
-        if (coreData.lastFrame != thisFrame)
+        if (coreData.isResizeDirty
+            || coreData.isInputDirty
+            || coreData.isUserTextUpdateDirty)
         {
-            cout << thisFrame << flush;
-            coreData.lastFrame = std::move(thisFrame);
+            string thisFrame = std::move(coreData.frame).str();
+
+            if (coreData.lastFrame != thisFrame)
+            {
+#if defined(KWIN_ANY)
+                system("cls");
+#else
+                system("clear");
+#endif
+                cout << thisFrame << flush;
+                coreData.lastFrame = std::move(thisFrame);
+            }
         }
+
         coreData.frame.str("");
         coreData.frame.clear();
 
         StopDrawCapture();
+
+        coreData.isResizeDirty = false;
+        coreData.isInputDirty = false;
+        coreData.isUserTextUpdateDirty = false;
     }
 
 	void KalaCLICore::ForceClose(

@@ -107,6 +107,7 @@ int main(int argc, char* argv[])
     //draw an extra long title to test title bar horizontal auto-scrolling if console is thin
     KalaCLICore::SetPageTitle("extra long title for no particular reason");
 
+    /*
     //draw a permanent row at the top, never overwritten by other content
     KalaCLICore::OverwriteRow(
         "##### overwritten top row #####",
@@ -127,12 +128,13 @@ int main(int argc, char* argv[])
 
     //lock the top row and two bottom rows so they are not accounted as scrollable and highlightable areas
     KalaCLICore::SetPageScrollRange({ 1, 2 });
+    */
     
     while(true)
     {
         KalaCLICore::UpdateDisplayedContent();
 
-        sleep_for(milliseconds(16));
+        sleep_for(milliseconds(33)); //30 frames per second
     }
 
     return 0;
