@@ -17,6 +17,8 @@
 #include <termios.h>
 #include <csignal>
 #include <cstdio>
+#include <cerrno>
+#include <term.h>
 #endif
 
 #include "log_utils.hpp"
@@ -258,19 +260,6 @@ static void StartCapture()
 
                     KalaCLICore::AppendToPage(std::move(line));
                 }
-
-                if (!carry.empty()
-                    && pageData.canConsoleWriteToPage.load())
-                {
-                    string line = carry;
-                    if (!line.empty()
-                        && line.back() == '\r')
-                    {
-                        line.pop_back();
-                    }
-                    KalaCLICore::AppendToPage(std::move(line));
-                    carry.clear();
-                }
             }
         }).detach();
 #else
@@ -320,60 +309,9 @@ static void StartCapture()
 
                     KalaCLICore::AppendToPage(std::move(line));
                 }
-
-                if (!carry.empty()
-                    && pageData.canConsoleWriteToPage.load())
-                {
-                    string line = carry;
-                    if (!line.empty()
-                        && line.back() == '\r')
-                    {
-                        line.pop_back();
-                    }
-                    KalaCLICore::AppendToPage(std::move(line));
-                    carry.clear();
-                }
             }
         }).detach();
 #endif
-}
-
-static void StartDrawCapture(bool fullStart)
-{
-    if (fullStart)
-    {
-        fflush(stdout);
-        fflush(stderr);
-        cout.flush();
-    }
-
-#if defined(KWIN_ANY)
-    _dup2(coreData.real_out, _fileno(stdout));
-    _dup2(coreData.real_err, _fileno(stderr));
-    SetStdHandle(STD_OUTPUT_HANDLE, (HANDLE)_get_osfhandle(coreData.real_out));
-    SetStdHandle(STD_ERROR_HANDLE, (HANDLE)_get_osfhandle(coreData.real_err));
-#else
-    dup2(coreData.real_out, STDOUT_FILENO);
-    dup2(coreData.real_err, STDERR_FILENO);
-#endif
-}
-
-static void StopDrawCapture()
-{
-    #if defined(KWIN_ANY)
-        _dup2(coreData.cap_pipe[1], _fileno(stdout));
-        _dup2(coreData.cap_pipe[1], _fileno(stderr));
-        SetStdHandle(STD_OUTPUT_HANDLE, (HANDLE)_get_osfhandle(coreData.cap_pipe[1]));
-        SetStdHandle(STD_ERROR_HANDLE, (HANDLE)_get_osfhandle(coreData.cap_pipe[1]));
-#else
-        dup2(coreData.cap_pipe[1], STDOUT_FILENO);
-        dup2(coreData.cap_pipe[1], STDERR_FILENO);
-#endif
-
-    setvbuf(stdout, nullptr, _IONBF, 0);
-    setvbuf(stderr, nullptr, _IONBF, 0);
-    cout.setf(std::ios::unitbuf);
-    cerr.setf(std::ios::unitbuf);
 }
 
 static u32 GetPushedKey()
@@ -1235,30 +1173,128 @@ namespace KalaCLI
             coreData.isResizeDirty = true;
         }
 
+        auto write_to_console = [](string_view frame) -> bool
+            {
+#if defined(KWIN_ANY)
+                HANDLE handle = (HANDLE)_get_osfhandle(coreData.real_out);
+                if (handle == INVALID_HANDLE_VALUE) return false;
+
+                size_t offset{};
+                while (offset < frame.size())
+                {
+                    DWORD written{};
+                    DWORD count = scast<DWORD>(min(frame.size() - offset, size_t(1024 * 1024)));
+
+                    if (!WriteFile(
+                        handle,
+                        frame.data() + offset,
+                        count,
+                        &written,
+                        nullptr))
+                    {
+                        return false;
+                    }
+
+                    if (written == 0) return false;
+                    offset += written;
+                }
+#else
+                size_t offset{};
+                while (offset < frame.size())
+                {
+                    ssize_t written = write(
+                        coreData.real_out,
+                        frame.data() + offset,
+                        frame.size() - offset);
+
+                    if (written < 0)
+                    {
+                        if (errno == EINTR) continue;
+                        return false;
+                    }
+
+                    if (written == 0) return false;
+                    offset += scast<size_t>(written);
+                }
+#endif
+                return true;
+            };
+
+        auto clear_screen = []() -> bool
+            {
+#if defined(KWIN_ANY)
+                HANDLE handle = (HANDLE)_get_osfhandle(coreData.real_out);
+
+                CONSOLE_SCREEN_BUFFER_INFO csbi{};
+                if (!GetConsoleScreenBufferInfo(handle, &csbi)) return false;
+
+                SMALL_RECT scrollRect
+                {
+                    0,
+                    0,
+                    scast<SHORT>(csbi.dwSize.X - 1),
+                    scast<SHORT>(csbi.dwSize.Y - 1)
+                };
+
+                COORD scrollTarget
+                {
+                    0,
+                    scast<SHORT>(-csbi.dwSize.Y)
+                };
+
+                CHAR_INFO fill{};
+                fill.Char.UnicodeChar = L' ';
+                fill.Attributes = csbi.wAttributes;
+
+                if (!ScrollConsoleScreenBufferW(
+                    handle,
+                    &scrollRect,
+                    nullptr,
+                    scrollTarget,
+                    &fill))
+                {
+                    return false;
+                }
+
+                if (!SetConsoleCursorPosition(
+                    handle,
+                    { 0, 0 }))
+                {
+                    return false;
+                }
+#else
+                
+#endif
+                return true;
+            };
+
         if (totalSize.x < WIDTH_MIN
             || totalSize.y < HEIGHT_MIN)
         {
-            //restore to real console before printing error
-            StartDrawCapture(false);
-
-            //clear
-            cout << "\x1b[2J\x1b[H";
-            //enable wrap for error
-            cout << "\x1b[?7h";
-
             string target = 
                 (totalSize.x < WIDTH_MIN
                 && totalSize.y < HEIGHT_MIN)
-                ? "width and height"
-                : totalSize.x < WIDTH_MIN
-                    ? "width"
-                    : "height";
+                    ? "width and height"
+                    : totalSize.x < WIDTH_MIN
+                        ? "width"
+                        : "height";
 
-            cout << "Cannot draw, console " << target << " is too small!";
-            cout.flush();
+            if (!clear_screen())
+            {
+                ForceClose(
+                    "KalaCLI core error",
+                    "Failed to clear console screen!");
+            }
 
-            //re-hijack before returning so next frame starts correctly
-            StopDrawCapture();
+            //disable wrapping and write error message
+            if (!write_to_console(
+                "\x1b[?7h"
+                "Cannot draw, console " + target + " is too small!"))
+            {
+                ForceClose(
+                    "KalaCLI core error",
+                    "Failed to write to console!");
+            }
 
             return;
         }
@@ -1520,8 +1556,6 @@ namespace KalaCLI
 
         if (u32 c = GetPushedKey()) handle_input_char(c);
 
-        StartDrawCapture(true);
-
         if (!coreData.hasReservedFrame)
         {
             coreData.frame.str().reserve(65536);
@@ -1551,8 +1585,13 @@ namespace KalaCLI
 
                 string spaces(coreData.innerW, ' ');
 
-                //clear
-                coreData.frame << "\x1b[2J\x1b[H";
+                if (!clear_screen())
+                {
+                    ForceClose(
+                        "KalaCLI core error",
+                        "Failed to clear console screen!");
+                }
+
                 //disable auto-wrap
                 coreData.frame << "\x1b[?7l";
 
@@ -1984,20 +2023,19 @@ namespace KalaCLI
 
             if (coreData.lastFrame != thisFrame)
             {
-#if defined(KWIN_ANY)
-                system("cls");
-#else
-                system("clear");
-#endif
-                cout << thisFrame << flush;
+                if (!write_to_console(thisFrame))
+                {
+                    ForceClose(
+                        "KalaCLI core error",
+                        "Failed to write to console!");
+                }
+
                 coreData.lastFrame = std::move(thisFrame);
             }
         }
 
         coreData.frame.str("");
         coreData.frame.clear();
-
-        StopDrawCapture();
 
         coreData.isResizeDirty = false;
         coreData.isInputDirty = false;

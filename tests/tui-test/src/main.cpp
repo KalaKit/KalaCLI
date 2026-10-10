@@ -12,7 +12,6 @@
 #include "kc_core.hpp"
 
 using KalaHeaders::KalaLog::Log;
-using KalaHeaders::KalaLog::LogType;
 
 using KalaHeaders::KalaFile::ReadLinesFromFile;
 
