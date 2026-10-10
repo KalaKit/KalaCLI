@@ -1568,7 +1568,7 @@ namespace KalaCLI
                         ? (int)inputData.typedTextCount - 1
                         : -1;
 
-                    coreData.isInputDirty = true;
+                    coreData.isUserTextUpdateDirty = true;
                 }
                 else if ((key == ALLOWED_KEY::KEY_BACKSPACE
                     || key == ALLOWED_KEY::KEY_DELETE)
@@ -1712,11 +1712,10 @@ namespace KalaCLI
                 coreData.frame << "\x1b[?7l";
 
                 if (!coreData.isResizeDirty
-                    && !coreData.isInputDirty
                     && !coreData.isUserTextUpdateDirty)
                 {
                     //save cursor position
-                    coreData.frame << "\x1b[s";     
+                    coreData.frame << "\x1b[s";
                     //move to top-left
                     coreData.frame << "\x1b[1;1H";  
 
@@ -1981,12 +1980,20 @@ namespace KalaCLI
 
         auto draw_input_box = [&]() -> void
             {
-                if (!coreData.isResizeDirty
-                    && !coreData.isInputDirty
-                    && !coreData.isUserTextUpdateDirty)
+                bool fullUpdate =
+                    coreData.isResizeDirty
+                    || coreData.isUserTextUpdateDirty;
+
+                if (!fullUpdate
+                    && !coreData.isInputDirty)
                 {
                     return;
                 }
+
+                ostringstream inputFrame{};
+                ostringstream& frame = fullUpdate
+                    ? coreData.frame
+                    : inputFrame;
 
                 string horizontalBar{};
                 horizontalBar.reserve(coreData.innerW * 3);
@@ -2035,21 +2042,22 @@ namespace KalaCLI
                     ? coreData.innerW - visibleText.size()
                     : 0;
 
+                frame << "\x1b[?7l";
                 //snap cursor to where page box stopped + wrap still disabled
-                coreData.frame << "\x1b[" << inputStartRow << ";1H";
+                frame << "\x1b[" << inputStartRow << ";1H";
 
                 //top border
-                coreData.frame << "┌" << horizontalBar << "┐\n";
+                frame << "┌" << horizontalBar << "┐\n";
                 //middle
-                coreData.frame << "│" << visibleText << string(pad, ' ') << "│\n";
+                frame << "│" << visibleText << string(pad, ' ') << "│\n";
                 //bottom border
-                coreData.frame << "└" << horizontalBar << "┘";
+                frame << "└" << horizontalBar << "┘";
                 
                 //snap cursor to input pos start
-                coreData.frame << "\x1b[" << (inputStartRow + 1) << ";" << 2 << "H";
+                frame << "\x1b[" << (inputStartRow + 1) << ";" << 2 << "H";
 
                 //paste visible text + clear remainder
-                coreData.frame << visibleText << string(pad, ' ');
+                frame << visibleText << string(pad, ' ');
 
                 //move cursor to visible cursorPos
 				u32 visibleCursor = (coreData.cursorPos >= inputData.inputScrollOffset)
@@ -2057,16 +2065,23 @@ namespace KalaCLI
 					: 0;
 				if (visibleCursor > coreData.innerW) visibleCursor = coreData.innerW;
 
-                coreData.frame << "\x1b[" << (inputStartRow + 1) << ";" << (2 + visibleCursor) << "H";
+                frame << "\x1b[" << (inputStartRow + 1) << ";" << (2 + visibleCursor) << "H";
 
                 //re-enable auto-wrap
-                coreData.frame << "\x1b[?7h";
+                frame << "\x1b[?7h";
+
+                if (!fullUpdate
+                    && !write_to_console(std::move(inputFrame).str()))
+                {
+                    ForceClose(
+                        "KalaCLI core error",
+                        "Failed to write to console!");
+                }
             };
 
         draw_input_box();
 
         if (coreData.isResizeDirty
-            || coreData.isInputDirty
             || coreData.isUserTextUpdateDirty)
         {
             if (!write_to_console(std::move(coreData.frame).str()))
