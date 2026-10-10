@@ -82,10 +82,8 @@ static constexpr u32 HEIGHT_MIN = 15;
 
 struct CoreData
 {
-	bool startedUpdate{};
-
-	string lastFrame{};
-	bool hasReservedLastFrame{};
+	atomic<bool> startedUpdate{};
+    atomic<bool> startedCommand{};
 
     vec2 lastSize{};
 
@@ -441,7 +439,7 @@ namespace KalaCLI
 {
     int _ = atexit([]
         {
-            if (coreData.startedUpdate)
+            if (coreData.startedUpdate.load())
             {
 #if defined(KWIN_ANY)
                 HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
@@ -594,7 +592,7 @@ namespace KalaCLI
     
     void KalaCLICore::AppendToPage(string_view line)
     {
-        if (!coreData.startedUpdate)
+        if (!coreData.startedUpdate.load())
         {
             Log::Print(line, true);
             return;
@@ -757,57 +755,67 @@ namespace KalaCLI
                 {
                     AppendToPage("ERROR: 'command' command requires a command argument!");
                 }
+                else if (coreData.startedCommand.exchange(true))
+                {
+                    AppendToPage("ERROR: Another command is already running!");
+                }
                 else
                 {
                     AppendToPage("  command: " + cmdContent);
-                    string fullCmd = cmdContent + " 2>&1";
+
+                    thread([command = std::move(cmdContent)]()
+                        {
+                            string fullCmd = command + " 2>&1";
 
 #if defined(KWIN_ANY)
-                    FILE* fp = _popen(fullCmd.c_str(), "r");
+                            FILE* fp = _popen(fullCmd.c_str(), "r");
 #else
-                    FILE* fp = popen(fullCmd.c_str(), "r");
+                            FILE* fp = popen(fullCmd.c_str(), "r");
 #endif
 
-                    if (!fp)
-                    {
-                        AppendToPage("ERROR: Failed to run command!");
-                    }
-                    else
-                    {
-                        char buf[4096];
-                        string carry{};
-
-                        while (fgets(buf, sizeof(buf), fp))
-                        {
-                            carry += buf;
-                            size_t pos{};
-
-                            while ((pos = carry.find('\n')) != string::npos)
+                            if (!fp)
                             {
-                                string line = carry.substr(0, pos);
-                                carry.erase(0, pos + 1);
-                                if (!line.empty()
-                                    && line.back() == '\r')
+                                AppendToPage("ERROR: Failed to run command!");
+                            }
+                            else
+                            {
+                                char buf[4096];
+                                string carry{};
+
+                                while (fgets(buf, sizeof(buf), fp))
                                 {
-                                    line.pop_back();
+                                    carry += buf;
+                                    size_t pos{};
+
+                                    while ((pos = carry.find('\n')) != string::npos)
+                                    {
+                                        string line = carry.substr(0, pos);
+                                        carry.erase(0, pos + 1);
+                                        if (!line.empty()
+                                            && line.back() == '\r')
+                                        {
+                                            line.pop_back();
+                                        }
+
+                                        AppendToPage(std::move(line));
+                                    }
                                 }
 
-                                AppendToPage(std::move(line));
-                            }
-                        }
-
-                        if (!carry.empty())
-                        {
-                            if (carry.back() == '\r') carry.pop_back();
-                            AppendToPage(std::move(carry));
-                        }
+                                if (!carry.empty())
+                                {
+                                    if (carry.back() == '\r') carry.pop_back();
+                                    AppendToPage(std::move(carry));
+                                }
 
 #if defined(KWIN_ANY)
-                        _pclose(fp);
+                                _pclose(fp);
 #else
-                        pclose(fp);
+                                pclose(fp);
 #endif
-                    }
+                            }
+
+                            coreData.startedCommand.store(false);
+                        }).detach();
                 }
             }
             else if (cmd == cmdEnableConsole
@@ -859,14 +867,24 @@ namespace KalaCLI
                 else
                 {
                     string combined{};
-                    size_t start = pageData.pageHead;
-                    size_t end = min(pageData.pageContent.size(), start + pageData.pageCount);
 
-#if defined(KWIN_ANY)
-                    for (size_t i = start; i < end; ++i)
                     {
-                        combined += pageData.pageContent[i];
-                        if (i + 1 < end) combined += "\r\n";
+                        lock_guard<mutex> lock(coreData.externalMutex);
+
+                        for (size_t i = 0; i < pageData.pageCount; ++i)
+                        {
+                            size_t index = (pageData.pageHead + i) % MAX_PAGE_LINES;
+                            combined += pageData.pageContent[index];
+
+                            if (i + 1 < pageData.pageCount)
+                            {
+#if defined(KWIN_ANY)
+                                combined += "\r\n";
+#else
+                                combined += "\n";
+#endif
+                            }
+                        }
                     }
 
                     if (combined.empty())
@@ -875,6 +893,7 @@ namespace KalaCLI
                     }
                     else
                     {
+#if defined(KWIN_ANY)
                         auto copy_to_clipboard = [&combined]() -> string
                             {
                                 if (!OpenClipboard(nullptr)) return "Failed to run OpenClipboard.";
@@ -903,20 +922,7 @@ namespace KalaCLI
                             AppendToPage("ERROR: Failed to copy page content to clipboard! Reason: " + err);
                         }
                         else AppendToPage("Copied page content to clipboard.");
-                    }
 #else
-                    for (size_t i = start; i < end; ++i)
-                    {
-                        combined += pageData.pageContent[i];
-                        if (i + 1 < end) combined += "\n";
-                    }
-
-                    if (combined.empty())
-                    {
-                        AppendToPage("ERROR: Failed to copy page content to clipboard because page content was empty!");
-                    }
-                    else
-                    {
                         auto copy_to_clipboard = [&combined](bool wl_copy) -> bool
                             {
                                 FILE* pipe = popen(
@@ -944,8 +950,8 @@ namespace KalaCLI
                         else AppendToPage(
                             "ERROR: Failed to copy page content to clipboard because "
                             "'wl-copy' and 'xclip' failed to run!");
-                    }
 #endif
+                    }
                 }
             }
             else if (cmd == cmdExit
@@ -1061,7 +1067,7 @@ namespace KalaCLI
 
     void KalaCLICore::UpdateDisplayedContent()
     {
-        if (!coreData.startedUpdate)
+        if (!coreData.startedUpdate.load())
         {
 #if defined(KWIN_ANY)
             setlocale(LC_ALL, ".UTF8");
@@ -1103,7 +1109,7 @@ namespace KalaCLI
 #endif
 
             StartCapture();
-            coreData.startedUpdate = true;
+            coreData.startedUpdate.store(true);
         }
 
         auto get_console_size = []() -> vec2
@@ -1389,14 +1395,18 @@ namespace KalaCLI
 
                 if (coreData.inPageMode)
                 {
-                    int total = scast<int>(pageData.pageCount);
-                    if (pageData.isWrapped)
+                    int total{};
                     {
-                        total = 0;
                         lock_guard<mutex> lock(coreData.externalMutex);
-                        for (u32 i = 0; i < pageData.pageCount; ++i)
+
+                        if (!pageData.isWrapped) total = scast<int>(pageData.pageCount);
+                        else
                         {
-                            total += count_wrapped_lines(pageData.pageContent[(pageData.pageHead + i) % MAX_PAGE_LINES]);
+                            for (u32 i = 0; i < pageData.pageCount; ++i)
+                            {
+                                total += count_wrapped_lines(pageData.pageContent[
+                                    (pageData.pageHead + i) % MAX_PAGE_LINES]);
+                            }
                         }
                     }
 
@@ -1583,19 +1593,113 @@ namespace KalaCLI
             coreData.hasReservedFrame = true;
         }
 
+        auto draw_top_border = [](string horizontalBar, u32 w) -> void
+            {
+                if (pageData.pageTitle.empty()        //no content to draw
+                    || pageData.pageTitle.size() < 3) //content is too short
+                {
+                    coreData.frame << "┌" << horizontalBar << "┐";
+
+                    return;
+                }
+
+                u32 available = min(w - 8, PAGE_TITLE_MAX_WIDTH);
+
+                auto get_display = [&]() -> string
+                    {
+                        static int offset{};
+                        static int dir = 1; //1 = right, -1 = left
+                        static int pause{};
+                        static auto last = steady_clock::now();
+                        static string lastTitle{};
+                        static u32 lastAvailable{};
+
+                        if (pageData.pageTitle != lastTitle
+                            || available != lastAvailable)
+                        {
+                            lastTitle = pageData.pageTitle;
+                            lastAvailable = available;
+
+                            offset = 0;
+                            dir = 1;
+                            pause = 0;
+
+                            last = steady_clock::now();
+                        }
+
+                        if (pageData.pageTitle.size() <= available)
+                        {
+                            offset = 0;
+                            dir = 1;
+                            return pageData.pageTitle;
+                        }
+
+                        int maxOffset = (int)pageData.pageTitle.size() - (int)available;
+                        auto now = steady_clock::now();
+
+                        if (now - last >= milliseconds(250))
+                        {
+                            last = now;
+                            if (pause > 0) pause--;
+                            else
+                            {
+                                offset += dir;
+                                if (offset >= maxOffset)
+                                {
+                                    offset = maxOffset; //far right - loses its ...
+                                    dir = -1;
+                                    pause = 1; //wait 1 sec
+                                }
+                                else if (offset <= 0)
+                                {
+                                    offset = 0; //far left
+                                    dir = 1;
+                                    pause = 1; //wait 1 sec
+                                }
+                            }
+                        }
+
+                        if (offset < 0) offset = 0;
+                        if (offset > maxOffset) offset = maxOffset;
+
+                        //no dots at true left
+                        if (offset == 0)
+                        {
+                            return pageData.pageTitle.substr(0, available - 3) + "...";
+                        }
+                        //no dots at true right
+                        else if (offset == maxOffset)
+                        {
+                            return "..." + pageData.pageTitle.substr(pageData.pageTitle.size() - (available - 3));
+                        }
+                        //middle of scroll - dots on both sides
+                        else
+                        {
+                            return "..." + pageData.pageTitle.substr(offset + 3, available - 6) + "...";
+                        }
+                    };
+
+                string display = get_display();
+
+                u32 left = (coreData.innerW - (u32)display.size()) / 2;
+                u32 right = coreData.innerW - (u32)display.size() - left;
+
+                string lbar{}, rbar{};
+                lbar.reserve(left * 3);
+                rbar.reserve(right * 3);
+
+                for (u32 i = 0; i < left; ++i) lbar += "─";
+                for (u32 i = 0; i < right; ++i) rbar += "─";
+
+                coreData.frame << "┌" << lbar << display << rbar << "┐";
+            };
+
         auto draw_page_box = [&]() -> u32
             {
                 u32 w = scast<u32>(totalSize.x);
                 u32 h = scast<u32>(totalSize.y);
 
                 u32 pageH = h - 3; //dont draw in bottom three rows
-
-                if (!coreData.isResizeDirty
-                    && !coreData.isInputDirty
-                    && !coreData.isUserTextUpdateDirty)
-                {
-                    return pageH + 1;
-                }
 
                 coreData.innerW = w - 2;
                 pageData.innerPageH = pageH - 2;
@@ -1604,7 +1708,35 @@ namespace KalaCLI
                 horizontalBar.reserve(coreData.innerW * 3);
                 for (u32 i = 0; i < coreData.innerW; ++i) horizontalBar += "─";
 
-                string spaces(coreData.innerW, ' ');
+                //disable auto-wrap
+                coreData.frame << "\x1b[?7l";
+
+                if (!coreData.isResizeDirty
+                    && !coreData.isInputDirty
+                    && !coreData.isUserTextUpdateDirty)
+                {
+                    //save cursor position
+                    coreData.frame << "\x1b[s";     
+                    //move to top-left
+                    coreData.frame << "\x1b[1;1H";  
+
+                    draw_top_border(horizontalBar, w);
+
+                    //restore cursor position
+                    coreData.frame << "\x1b[u";
+                    
+                    if (!write_to_console(std::move(coreData.frame).str()))
+                    {
+                        ForceClose(
+                            "KalaCLI core error",
+                            "Failed to write to console!");
+                    }
+
+                    coreData.frame.str("");
+                    coreData.frame.clear();
+
+                    return pageH + 1;
+                }
 
                 if (!clear_screen())
                 {
@@ -1613,122 +1745,22 @@ namespace KalaCLI
                         "Failed to clear console screen!");
                 }
 
-                //disable auto-wrap
-                coreData.frame << "\x1b[?7l";
-
-                auto draw_top_border = [&]() -> void
-                    {
-                        if (pageData.pageTitle.empty()        //no content to draw
-                            || pageData.pageTitle.size() < 3) //content is too short
-                        {
-                            coreData.frame << "┌" << horizontalBar << "┐";
-
-                            return;
-                        }
-
-                        u32 available = min(w - 8, PAGE_TITLE_MAX_WIDTH);
-
-                        auto get_display = [&]() -> string
-                            {
-                                static int offset{};
-                                static int dir = 1; //1 = right, -1 = left
-                                static int pause{};
-                                static auto last = steady_clock::now();
-                                static string lastTitle{};
-                                static u32 lastAvailable{};
-
-                                if (pageData.pageTitle != lastTitle
-                                    || available != lastAvailable)
-                                {
-                                    lastTitle = pageData.pageTitle;
-                                    lastAvailable = available;
-
-                                    offset = 0;
-                                    dir = 1;
-                                    pause = 0;
-
-                                    last = steady_clock::now();
-                                }
-
-                                if (pageData.pageTitle.size() <= available)
-                                {
-                                    offset = 0;
-                                    dir = 1;
-                                    return pageData.pageTitle;
-                                }
-
-                                int maxOffset = (int)pageData.pageTitle.size() - (int)available;
-                                auto now = steady_clock::now();
-
-                                if (now - last >= milliseconds(250))
-                                {
-                                    last = now;
-                                    if (pause > 0) pause--;
-                                    else
-                                    {
-                                        offset += dir;
-                                        if (offset >= maxOffset)
-                                        {
-                                            offset = maxOffset; //far right - loses its ...
-                                            dir = -1;
-                                            pause = 1; //wait 1 sec
-                                        }
-                                        else if (offset <= 0)
-                                        {
-                                            offset = 0; //far left
-                                            dir = 1;
-                                            pause = 1; //wait 1 sec
-                                        }
-                                    }
-                                }
-
-                                if (offset < 0) offset = 0;
-                                if (offset > maxOffset) offset = maxOffset;
-
-                                //no dots at true left
-                                if (offset == 0)
-								{
-									return pageData.pageTitle.substr(0, available - 3) + "...";
-								}
-                                //no dots at true right
-                                else if (offset == maxOffset)
-								{
-									return "..." + pageData.pageTitle.substr(pageData.pageTitle.size() - (available - 3));
-								}
-                                //middle of scroll - dots on both sides
-                                else
-								{
-									return "..." + pageData.pageTitle.substr(offset + 3, available - 6) + "...";
-								}
-                            };
-
-                        string display = get_display();
-
-                        u32 left = (coreData.innerW - (u32)display.size()) / 2;
-                        u32 right = coreData.innerW - (u32)display.size() - left;
-
-                        string lbar{}, rbar{};
-                        lbar.reserve(left * 3);
-                        rbar.reserve(right * 3);
-
-                        for (u32 i = 0; i < left; ++i) lbar += "─";
-                        for (u32 i = 0; i < right; ++i) rbar += "─";
-
-                        coreData.frame << "┌" << lbar << display << rbar << "┐";
-                    };
-
-                draw_top_border();
+                draw_top_border(horizontalBar, w);
 
                 auto draw_middle = [&]() -> void
                     {
-                        int total = scast<int>(pageData.pageCount);
-                        if (pageData.isWrapped)
+                        int total{};
                         {
-                            total = 0;
                             lock_guard<mutex> lock(coreData.externalMutex);
-                            for (u32 i = 0; i < pageData.pageCount; ++i)
+
+                            if (!pageData.isWrapped) total = scast<int>(pageData.pageCount);
+                            else
                             {
-                                total += count_wrapped_lines(pageData.pageContent[(pageData.pageHead + i) % MAX_PAGE_LINES]);
+                                for (u32 i = 0; i < pageData.pageCount; ++i)
+                                {
+                                    total += count_wrapped_lines(pageData.pageContent[
+                                        (pageData.pageHead + i) % MAX_PAGE_LINES]);
+                                }
                             }
                         }
 
@@ -2033,28 +2065,15 @@ namespace KalaCLI
 
         draw_input_box();
 
-        if (!coreData.hasReservedLastFrame)
-        {
-            coreData.lastFrame.reserve(65536);
-            coreData.hasReservedLastFrame = true;
-        }
-
         if (coreData.isResizeDirty
             || coreData.isInputDirty
             || coreData.isUserTextUpdateDirty)
         {
-            string thisFrame = std::move(coreData.frame).str();
-
-            if (coreData.lastFrame != thisFrame)
+            if (!write_to_console(std::move(coreData.frame).str()))
             {
-                if (!write_to_console(thisFrame))
-                {
-                    ForceClose(
-                        "KalaCLI core error",
-                        "Failed to write to console!");
-                }
-
-                coreData.lastFrame = std::move(thisFrame);
+                ForceClose(
+                    "KalaCLI core error",
+                    "Failed to write to console!");
             }
         }
 
