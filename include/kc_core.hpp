@@ -48,6 +48,9 @@ namespace KalaCLI
 
 	struct LIB_API Command
 	{
+		//Can this command also be ran in headless mode without the full CLI
+		bool allowInHeadlessMode{};
+
 		//What parameter to use to call this command
 		string primaryParam{};
 
@@ -140,18 +143,17 @@ namespace KalaCLI
 		//commands that start with COMMAND_PREFIX are sent to CLI internal command parser,
 		//writing a message without a command prefix writes it to the CLI like a normal message.
 		//Built in CLI commands:
-		//- --help, --h: lists all available commands and what they do,
-		//- --clear, --c: clears all CLI page messages,
-		//- --command command, --cmd command: sends selected message as command to console,
-		//- --enableconsole, --ec: enables console-based updates,
-		//- --disableconsole, --dc: disables console-based updates,
-		//- --setpagetitle title, --spt title: updates page title,
-		//- --copypage, --cp: copies page content to clipboard
-		//- --exit, --e: close the CLI
+		//- --h: lists all available commands and what they do,
+		//- --c: clears all CLI page messages,
+		//- --cmd command: sends selected message as command to console,
+		//- --ec: enables console-based updates,
+		//- --dc: disables console-based updates,
+		//- --spt title: updates page title,
+		//- --cp: copies page content to clipboard
+		//- --e: exit the CLI
 		static void SendCommand(string_view command);
 
-		//Add a new command,
-		//set target action to empty for existing command to remove it from commands list
+		//Add a new command
 		static void AddCommand(Command&& command);
 
 		//Call once per frame,

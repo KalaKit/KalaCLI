@@ -169,29 +169,14 @@ static CoreData coreData{};
 static PageViewBoxData pageData{};
 static InputBoxData inputData{};
 
-static const string cmdHelp = string(COMMAND_PREFIX) + "help";
-static const string cmdH = string(COMMAND_PREFIX) + "h";
-
-static const string cmdClear = string(COMMAND_PREFIX) + "clear";
-static const string cmdC = string(COMMAND_PREFIX) + "c";
-
-static const string cmdCommand = string(COMMAND_PREFIX) + "command";
-static const string cmdCmd = string(COMMAND_PREFIX) + "cmd";
-
-static const string cmdEnableConsole = string(COMMAND_PREFIX) + "enableconsole";
-static const string cmdEC = string(COMMAND_PREFIX) + "ec";
-
-static const string cmdDisableConsole = string(COMMAND_PREFIX) + "disableconsole";
-static const string cmdDC = string(COMMAND_PREFIX) + "dc";
-
-static const string cmdSetPageTitle = string(COMMAND_PREFIX) + "setpagetitle";
-static const string cmdSPT = string(COMMAND_PREFIX) + "spt";
-
-static const string cmdCopyPage = string(COMMAND_PREFIX) + "copypage";
-static const string cmdCP = string(COMMAND_PREFIX) + "cp";
-
-static const string cmdExit = string(COMMAND_PREFIX) + "exit";
-static const string cmdE = string(COMMAND_PREFIX) + "e";
+static const string cmdHelp =           string(COMMAND_PREFIX) + "h";
+static const string cmdClear =          string(COMMAND_PREFIX) + "c";
+static const string cmdCommand =        string(COMMAND_PREFIX) + "cmd";
+static const string cmdEnableConsole =  string(COMMAND_PREFIX) + "ec";
+static const string cmdDisableConsole = string(COMMAND_PREFIX) + "dc";
+static const string cmdSetPageTitle =   string(COMMAND_PREFIX) + "spt";
+static const string cmdCopyPage =       string(COMMAND_PREFIX) + "cp";
+static const string cmdExit =           string(COMMAND_PREFIX) + "e";
 
 static vector<Command> addedCommands{};
 
@@ -752,288 +737,324 @@ namespace KalaCLI
                 cmdContent = string(command.substr(pos + 1));
             }
 
-            if (cmd == cmdHelp
-                || cmd == cmdH)
+            if (cmd == cmdHelp)
             {
                 if (split.size() > 1)
                 {
-                    AppendToPage("ERROR: 'help' command does not accept any arguments!");
+                    AppendToPage("ERROR: Command 'h' does not accept any arguments!");
+                    return;
                 }
-                else
+
+                if (!pageData.isWrapped)
                 {
-                    AppendToPage(
-                        string(COMMAND_PREFIX) + "help, " + string(COMMAND_PREFIX) 
-                        + "h: lists all available commands and what they do");
-                    AppendToPage(
-                        string(COMMAND_PREFIX) + "clear, " + string(COMMAND_PREFIX) 
-                        + "c: clears all CLI page messages");
-                    AppendToPage(
-                        string(COMMAND_PREFIX) + "command command, " + string(COMMAND_PREFIX) 
-                        + "cmd command: sends selected message as command to console");
-                    AppendToPage(
-                        string(COMMAND_PREFIX) + "enableconsole, " + string(COMMAND_PREFIX) 
-                        + "ec: enables console-based updates");
-                    AppendToPage(
-                        string(COMMAND_PREFIX) + "disableconsole, " + string(COMMAND_PREFIX) 
-                        + "dc: disables console-based updates");
-                    AppendToPage(
-                        string(COMMAND_PREFIX) + "copypage, " + string(COMMAND_PREFIX) 
-                        + "cp: copies page content to clipboard");
-                    AppendToPage(
-                        string(COMMAND_PREFIX) + "setpagetitle title, " + string(COMMAND_PREFIX) 
-                        + "spt title: updates page title");
-
-                    for (const Command& thisCmd : addedCommands)
-                    {
-                        if (!thisCmd.targetFunction) continue; //ignore empty functions
-
-                        AppendToPage(string(COMMAND_PREFIX) + thisCmd.primaryParam + ": " + thisCmd.description);
-                    }
+                    AppendToPage("WARNING: Wrapping is disabled, help messages may appear clipped!");
                 }
+
+                AppendToPage("Available commands:");
+                AppendToPage(
+                    string(COMMAND_PREFIX) + "h: lists all available commands and what they do");
+                AppendToPage(
+                    string(COMMAND_PREFIX) + "c: clears all CLI page messages");
+                AppendToPage(
+                    string(COMMAND_PREFIX) + "cmd command: sends selected message as command to console");
+                AppendToPage(
+                    string(COMMAND_PREFIX) + "ec: enables console-based updates");
+                AppendToPage(
+                    string(COMMAND_PREFIX) + "dc: disables console-based updates");
+                AppendToPage(
+                    string(COMMAND_PREFIX) + "spt title: updates page title");
+                AppendToPage(
+                    string(COMMAND_PREFIX) + "cp: copies page content to clipboard");
+                AppendToPage(
+                    string(COMMAND_PREFIX) + "e: exit the CLI");
+
+                for (const Command& thisCmd : addedCommands)
+                {
+                    AppendToPage(string(COMMAND_PREFIX) + thisCmd.primaryParam + ": " + thisCmd.description);
+                }
+
+                AppendToPage(" ");
+                AppendToPage("How to interact:");
+                AppendToPage("Press tab to toggle between page view mode and input mode.");
+                AppendToPage(
+                    "Page view mode allows you to navigate around the page view box "
+                    "which is the big vertically scrollable box above the bottom input box.");
+                AppendToPage(
+                    "Input mode allows you to navigate around the input box "
+                    "which is the short horizontally scrollable box below the page view box.");
+                AppendToPage(
+                    "Use the up and down keyboard keys to scroll the page view box history, "
+                    "use the same keys to scroll the input history.");
+                AppendToPage(
+                    "Press enter to send a command or message to the cli while in input mode, "
+                    "press enter to interact with the highlighted message while in page view mode, "
+                    "the default action is to copy it to input box unless it is overwritten.");
             }
-            else if (cmd == cmdClear
-                || cmd == cmdC)
+            else if (cmd == cmdClear)
             {
+                if (!coreData.startedUpdate)
+                {
+                    AppendToPage("ERROR: Command 'c' cannot be called in headless mode!");
+                    return;
+                }
                 if (split.size() > 1)
                 {
-                    AppendToPage("ERROR: 'clear' command does not accept any arguments!");
+                    AppendToPage("ERROR: Command 'c' does not accept any arguments!");
+                    return;
                 }
-                else
-                {
-                    lock_guard<mutex> lock(coreData.externalMutex);
 
-                    pageData.pageContent = {};
-                    pageData.pageHead = 0;
-                    pageData.pageCount = 0;
-                    pageData.pageTop = 0;
-                    pageData.pageSelection = 0;
-                }
+                lock_guard<mutex> lock(coreData.externalMutex);
+
+                pageData.pageContent = {};
+                pageData.pageHead = 0;
+                pageData.pageCount = 0;
+                pageData.pageTop = 0;
+                pageData.pageSelection = 0;
             }
-            else if (cmd == cmdCommand
-                || cmd == cmdCmd)
+            else if (cmd == cmdCommand)
             {
+                if (!coreData.startedUpdate)
+                {
+                    AppendToPage("ERROR: Command 'cmd' cannot be called in headless mode!");
+                    return;
+                }
                 if (cmdContent.empty())
                 {
-                    AppendToPage("ERROR: 'command' command requires a command argument!");
+                    AppendToPage("ERROR: Command 'cmd' requires a command argument!");
+                    return;
                 }
-                else if (coreData.startedCommand.exchange(true))
+                if (coreData.startedCommand.exchange(true))
                 {
-                    AppendToPage("ERROR: Another command is already running!");
+                    AppendToPage("ERROR: Failed to run command 'cmd' because another command is already running!");
+                    return;
                 }
-                else
-                {
-                    AppendToPage("  command: " + cmdContent);
 
-                    thread([command = std::move(cmdContent)]()
-                        {
-                            string fullCmd = command + " 2>&1";
+                AppendToPage("  command: " + cmdContent);
+
+                thread([command = std::move(cmdContent)]()
+                    {
+                        string fullCmd = command + " 2>&1";
 
 #if defined(KWIN_ANY)
-                            FILE* fp = _popen(fullCmd.c_str(), "r");
+                        FILE* fp = _popen(fullCmd.c_str(), "r");
 #else
-                            FILE* fp = popen(fullCmd.c_str(), "r");
+                        FILE* fp = popen(fullCmd.c_str(), "r");
 #endif
 
-                            if (!fp)
-                            {
-                                AppendToPage("ERROR: Failed to run command!");
-                            }
-                            else
-                            {
-                                char buf[4096];
-                                string carry{};
-
-                                while (fgets(buf, sizeof(buf), fp))
-                                {
-                                    carry += buf;
-                                    size_t pos{};
-
-                                    while ((pos = carry.find('\n')) != string::npos)
-                                    {
-                                        string line = carry.substr(0, pos);
-                                        carry.erase(0, pos + 1);
-                                        if (!line.empty()
-                                            && line.back() == '\r')
-                                        {
-                                            line.pop_back();
-                                        }
-
-                                        AppendToPage(std::move(line));
-                                    }
-                                }
-
-                                if (!carry.empty())
-                                {
-                                    if (carry.back() == '\r') carry.pop_back();
-                                    AppendToPage(std::move(carry));
-                                }
-
-#if defined(KWIN_ANY)
-                                _pclose(fp);
-#else
-                                pclose(fp);
-#endif
-                            }
-
-                            coreData.startedCommand.store(false);
-                        }).detach();
-                }
-            }
-            else if (cmd == cmdEnableConsole
-                || cmd == cmdEC)
-            {
-                if (split.size() > 1)
-                {
-                    AppendToPage("ERROR: 'enableconsole' command does not accept any arguments!");
-                }
-                else
-                {
-                    if (isVerboseLoggingEnabled) AppendToPage("Enabled console messages.");
-
-                    pageData.canConsoleWriteToPage = true;
-                }
-            }
-            else if (cmd == cmdDisableConsole
-                || cmd == cmdDC)
-            {
-                if (split.size() > 1)
-                {
-                    AppendToPage("ERROR: 'disableconsole' command does not accept any arguments!");
-                }
-                else
-                {
-                    if (isVerboseLoggingEnabled) AppendToPage("Disabled console messages.");
-                    
-                    pageData.canConsoleWriteToPage = false;
-                }
-            }
-            else if (cmd == cmdSetPageTitle
-                || cmd == cmdSPT)
-            {
-                if (cmdContent.empty())
-                {
-                    AppendToPage("ERROR: 'setpagetitle' command requires a value!");
-                }
-                else
-                {
-
-                    if (isVerboseLoggingEnabled) AppendToPage("Updated page title.");
-        
-                    SetPageTitle(cmdContent);
-                }
-            }
-            else if (cmd == cmdCopyPage
-                || cmd == cmdCP)
-            {
-                if (split.size() > 1)
-                {
-                    AppendToPage("ERROR: 'copypage' command does not accept any arguments!");
-                }
-                else
-                {
-                    string combined{};
-
-                    {
-                        lock_guard<mutex> lock(coreData.externalMutex);
-
-                        for (size_t i = 0; i < pageData.pageCount; ++i)
+                        if (!fp)
                         {
-                            size_t index = (pageData.pageHead + i) % MAX_PAGE_LINES;
-                            combined += pageData.pageContent[index];
-
-                            if (i + 1 < pageData.pageCount)
-                            {
-#if defined(KWIN_ANY)
-                                combined += "\r\n";
-#else
-                                combined += "\n";
-#endif
-                            }
-                        }
-                    }
-
-                    if (combined.empty())
-                    {
-                        AppendToPage("ERROR: Failed to copy page content to clipboard because page content was empty!");
-                    }
-                    else
-                    {
-#if defined(KWIN_ANY)
-                        auto copy_to_clipboard = [&combined]() -> string
-                            {
-                                if (!OpenClipboard(nullptr)) return "Failed to run OpenClipboard.";
-                                EmptyClipboard();
-
-                                HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, combined.size() + 1);
-                                if (!hMem)
-                                {
-                                    CloseClipboard();
-                                    return "Failed to allocate hMem.";
-                                }
-
-                                char* pMem = (char*)GlobalLock(hMem);
-                                memcpy(pMem, combined.c_str(), combined.size() + 1);
-                                GlobalUnlock(hMem);
-
-                                SetClipboardData(CF_TEXT, hMem);
-                                CloseClipboard();
-
-                                return "";
-                            };
-
-                        string err = copy_to_clipboard();
-                        if (!err.empty())
-                        {
-                            AppendToPage("ERROR: Failed to copy page content to clipboard! Reason: " + err);
+                            AppendToPage("ERROR: Failed to run command!");
                         }
                         else
                         {
-                            if (isVerboseLoggingEnabled) AppendToPage("Copied page content to clipboard.");
-                        }
-#else
-                        auto copy_to_clipboard = [&combined](bool wl_copy) -> bool
+                            char buf[4096];
+                            string carry{};
+
+                            while (fgets(buf, sizeof(buf), fp))
                             {
-                                FILE* pipe = popen(
-                                    (wl_copy 
-                                        ? "wl-copy 2>/dev/null" 
-                                        : "xclip -selection clipboard 2>/dev/null"),
-                                        "w");
-                                if (!pipe) return false;
+                                carry += buf;
+                                size_t pos{};
 
-                                size_t written = fwrite(
-                                    combined.data(),
-                                    1,
-                                    combined.size(),
-                                    pipe);
+                                while ((pos = carry.find('\n')) != string::npos)
+                                {
+                                    string line = carry.substr(0, pos);
+                                    carry.erase(0, pos + 1);
+                                    if (!line.empty()
+                                        && line.back() == '\r')
+                                    {
+                                        line.pop_back();
+                                    }
 
-                                return pclose(pipe) == 0
-                                    && written == combined.size();
-                            };
+                                    AppendToPage(std::move(line));
+                                }
+                            }
 
-                        if (copy_to_clipboard(true)
-                            || copy_to_clipboard(false))
-                        {
-                            if (isVerboseLoggingEnabled) AppendToPage("Copied page content to clipboard.");
-                        }
-                        else AppendToPage(
-                            "ERROR: Failed to copy page content to clipboard because "
-                            "'wl-copy' and 'xclip' failed to run!");
+                            if (!carry.empty())
+                            {
+                                if (carry.back() == '\r') carry.pop_back();
+                                AppendToPage(std::move(carry));
+                            }
+
+#if defined(KWIN_ANY)
+                            _pclose(fp);
+#else
+                            pclose(fp);
 #endif
-                    }
-                }
+                        }
+
+                        coreData.startedCommand.store(false);
+                    }).detach();
             }
-            else if (cmd == cmdExit
-                || cmd == cmdE)
+            else if (cmd == cmdEnableConsole)
             {
+                if (!coreData.startedUpdate)
+                {
+                    AppendToPage("ERROR: Command 'ec' cannot be called in headless mode!");
+                    return;
+                }
                 if (split.size() > 1)
                 {
-                    AppendToPage("ERROR: 'exit' command does not accept any arguments!");
+                    AppendToPage("ERROR: Command 'ec' does not accept any arguments!");
+                    return;
                 }
-                else exit(0);
+
+                if (isVerboseLoggingEnabled) AppendToPage("Enabled console messages.");
+
+                pageData.canConsoleWriteToPage = true;
+            }
+            else if (cmd == cmdDisableConsole)
+            {
+                if (!coreData.startedUpdate)
+                {
+                    AppendToPage("ERROR: Command 'dc' cannot be called in headless mode!");
+                    return;
+                }
+                if (split.size() > 1)
+                {
+                    AppendToPage("ERROR: Command 'dc' does not accept any arguments!");
+                    return;
+                }
+
+                if (isVerboseLoggingEnabled) AppendToPage("Disabled console messages.");
+                
+                pageData.canConsoleWriteToPage = false;
+            }
+            else if (cmd == cmdSetPageTitle)
+            {
+                if (!coreData.startedUpdate)
+                {
+                    AppendToPage("ERROR: Command 'spt' cannot be called in headless mode!");
+                    return;
+                }
+                if (cmdContent.empty())
+                {
+                    AppendToPage("ERROR: Command 'spt' requires a value!");
+                    return;
+                }
+
+                if (isVerboseLoggingEnabled) AppendToPage("Updated page title.");
+    
+                SetPageTitle(cmdContent);
+            }
+            else if (cmd == cmdCopyPage)
+            {
+                if (!coreData.startedUpdate)
+                {
+                    AppendToPage("ERROR: Command 'cp' cannot be called in headless mode!");
+                    return;
+                }
+                if (split.size() > 1)
+                {
+                    AppendToPage("ERROR: Command 'cp' does not accept any arguments!");
+                    return;
+                }
+
+                string combined{};
+
+                {
+                    lock_guard<mutex> lock(coreData.externalMutex);
+
+                    for (size_t i = 0; i < pageData.pageCount; ++i)
+                    {
+                        size_t index = (pageData.pageHead + i) % MAX_PAGE_LINES;
+                        combined += pageData.pageContent[index];
+
+                        if (i + 1 < pageData.pageCount)
+                        {
+#if defined(KWIN_ANY)
+                            combined += "\r\n";
+#else
+                            combined += "\n";
+#endif
+                        }
+                    }
+                }
+
+                if (combined.empty())
+                {
+                    AppendToPage("ERROR: Failed to copy page content to clipboard because page content was empty!");
+                    return;
+                }
+
+#if defined(KWIN_ANY)
+                auto copy_to_clipboard = [&combined]() -> string
+                    {
+                        if (!OpenClipboard(nullptr)) return "Failed to run OpenClipboard.";
+                        EmptyClipboard();
+
+                        HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, combined.size() + 1);
+                        if (!hMem)
+                        {
+                            CloseClipboard();
+                            return "Failed to allocate hMem.";
+                        }
+
+                        char* pMem = (char*)GlobalLock(hMem);
+                        memcpy(pMem, combined.c_str(), combined.size() + 1);
+                        GlobalUnlock(hMem);
+
+                        SetClipboardData(CF_TEXT, hMem);
+                        CloseClipboard();
+
+                        return "";
+                    };
+
+                string err = copy_to_clipboard();
+                if (!err.empty())
+                {
+                    AppendToPage("ERROR: Failed to copy page content to clipboard! Reason: " + err);
+                    return;
+                }
+#else
+                auto copy_to_clipboard = [&combined](bool wl_copy) -> bool
+                    {
+                        FILE* pipe = popen(
+                            (wl_copy 
+                                ? "wl-copy 2>/dev/null" 
+                                : "xclip -selection clipboard 2>/dev/null"),
+                                "w");
+                        if (!pipe) return false;
+
+                        size_t written = fwrite(
+                            combined.data(),
+                            1,
+                            combined.size(),
+                            pipe);
+
+                        return pclose(pipe) == 0
+                            && written == combined.size();
+                    };
+
+                if (!copy_to_clipboard(true)
+                    && !copy_to_clipboard(false))
+                {
+                    AppendToPage(
+                        "ERROR: Failed to copy page content to clipboard because "
+                        "'wl-copy' and 'xclip' failed to run!");
+                    return;
+                }
+#endif
+
+                if (isVerboseLoggingEnabled) AppendToPage("Copied page content to clipboard.");
+            }
+            else if (cmd == cmdExit)
+            {
+                if (!coreData.startedUpdate)
+                {
+                    AppendToPage("ERROR: Command 'e' cannot be called in headless mode!");
+                    return;
+                }
+                if (split.size() > 1)
+                {
+                    AppendToPage("ERROR: Command 'e' does not accept any arguments!");
+                    return;
+                }
+
+                exit(0);
             }
             else
             {
-                auto call_user_added_command = [&]() -> bool
+                auto call_user_added_command = [&]() -> string
                     {
                         for (const Command& thisCmd : addedCommands)
                         {
@@ -1042,20 +1063,24 @@ namespace KalaCLI
                                 vector<string> splitCopy = split;
                                 splitCopy.erase(splitCopy.begin());
 
+                                if (!thisCmd.allowInHeadlessMode
+                                    && !coreData.startedUpdate)
+                                {
+                                    return "Command '" + thisCmd.primaryParam + "' cannot be called in headless mode!";
+                                }
+
                                 thisCmd.targetFunction(splitCopy);
-                                return true;
+                                return "";
                             }
                         }
 
-                        return false;
+                        return 
+                            "Command '" + cmd + "' was not found! "
+                            "Type '" + string(COMMAND_PREFIX) + "h' to list all available commands.";
                     };
 
-                if (!call_user_added_command())
-                {
-                    AppendToPage(
-                        "ERROR: Command '" + cmd + "' was not found! "
-                        "Type '/help' to list all available commands.");
-                }
+                string err = call_user_added_command();
+                if (!err.empty()) AppendToPage("ERROR: " + err);
             }
         }
         else
@@ -1074,26 +1099,20 @@ namespace KalaCLI
             return;
         }
 
-        if (command.primaryParam == cmdHelp
-            || command.primaryParam == cmdH
-            || command.primaryParam == cmdClear
-            || command.primaryParam == cmdC
-            || command.primaryParam == cmdCommand
-            || command.primaryParam == cmdCmd
-            || command.primaryParam == cmdEnableConsole
-            || command.primaryParam == cmdEC
-            || command.primaryParam == cmdDisableConsole
-            || command.primaryParam == cmdDC
-            || command.primaryParam == cmdSetPageTitle
-            || command.primaryParam == cmdSPT
-            || command.primaryParam == cmdCopyPage
-            || command.primaryParam == cmdCP
-            || command.primaryParam == cmdExit
-            || command.primaryParam == cmdE)
+        string prefixedParam = string(COMMAND_PREFIX) + command.primaryParam;
+
+        if (prefixedParam == cmdHelp
+            || prefixedParam == cmdClear
+            || prefixedParam == cmdCommand
+            || prefixedParam == cmdEnableConsole
+            || prefixedParam == cmdDisableConsole
+            || prefixedParam == cmdSetPageTitle
+            || prefixedParam == cmdCopyPage
+            || prefixedParam == cmdExit)
         {
             AppendToPage(
                 "ERROR: Failed to add command because its name '" 
-                + string(command.primaryParam) + "' is used by a KalaCLI CLI command!");
+                + string(command.primaryParam) + "' is used by a KalaCLI command!");
 
             return;
         }
@@ -1104,23 +1123,11 @@ namespace KalaCLI
 
             if (command.primaryParam == c.primaryParam)
             {
-				if (!command.targetFunction)
-				{
-					AppendToPage("Removed added command '" + string(command.primaryParam) + "'!");
-					addedCommands.erase(addedCommands.begin() + i);
-					return;
-				}
-				else
-				{
-					AppendToPage("WARNING: Overwrote command function for existing command '" + string(command.primaryParam) + "'!");
-					c.targetFunction = command.targetFunction;
-					return;
-				}
+                AppendToPage("ERROR: Failed to add custom command '" + string(command.primaryParam) + "' because it has already been added!");
+                return;
             }
         }
 
-        //you can clear target function for existing commands,
-        //but you cannot pass empty function to newly added commands
         if (!command.targetFunction)
         {
             AppendToPage(
