@@ -745,50 +745,70 @@ namespace KalaCLI
                     return;
                 }
 
-                if (!pageData.isWrapped)
+                if (!pageData.isWrapped
+                    && coreData.startedUpdate)
                 {
                     AppendToPage("WARNING: Wrapping is disabled, help messages may appear clipped!");
+                }
+                if (!coreData.startedUpdate)
+                {
+                    AppendToPage(
+                        "Run the 'h' command again when not in headless mode "
+                        "to display additional non-headless commands and interaction info.");
                 }
 
                 AppendToPage("Available commands:");
                 AppendToPage(
                     string(COMMAND_PREFIX) + "h: lists all available commands and what they do");
-                AppendToPage(
-                    string(COMMAND_PREFIX) + "c: clears all CLI page messages");
-                AppendToPage(
-                    string(COMMAND_PREFIX) + "cmd command: sends selected message as command to console");
-                AppendToPage(
-                    string(COMMAND_PREFIX) + "ec: enables console-based updates");
-                AppendToPage(
-                    string(COMMAND_PREFIX) + "dc: disables console-based updates");
-                AppendToPage(
-                    string(COMMAND_PREFIX) + "spt title: updates page title");
-                AppendToPage(
-                    string(COMMAND_PREFIX) + "cp: copies page content to clipboard");
-                AppendToPage(
-                    string(COMMAND_PREFIX) + "e: exit the CLI");
+
+                if (coreData.startedUpdate)
+                {
+                    AppendToPage(
+                        string(COMMAND_PREFIX) + "c: clears all CLI page messages");
+                    AppendToPage(
+                        string(COMMAND_PREFIX) + "cmd command: sends selected message as command to console");
+                    AppendToPage(
+                        string(COMMAND_PREFIX) + "ec: enables console-based updates");
+                    AppendToPage(
+                        string(COMMAND_PREFIX) + "dc: disables console-based updates");
+                    AppendToPage(
+                        string(COMMAND_PREFIX) + "spt title: updates page title");
+                    AppendToPage(
+                        string(COMMAND_PREFIX) + "cp: copies page content to clipboard");
+                    AppendToPage(
+                        string(COMMAND_PREFIX) + "e: exit the CLI");
+                }
 
                 for (const Command& thisCmd : addedCommands)
                 {
+                    if (!coreData.startedUpdate
+                        && !thisCmd.allowInHeadlessMode)
+                    {
+                        continue;
+                    }
+
                     AppendToPage(string(COMMAND_PREFIX) + thisCmd.primaryParam + ": " + thisCmd.description);
                 }
 
-                AppendToPage(" ");
-                AppendToPage("How to interact:");
-                AppendToPage("Press tab to toggle between page view mode and input mode.");
-                AppendToPage(
-                    "Page view mode allows you to navigate around the page view box "
-                    "which is the big vertically scrollable box above the bottom input box.");
-                AppendToPage(
-                    "Input mode allows you to navigate around the input box "
-                    "which is the short horizontally scrollable box below the page view box.");
-                AppendToPage(
-                    "Use the up and down keyboard keys to scroll the page view box history, "
-                    "use the same keys to scroll the input history.");
-                AppendToPage(
-                    "Press enter to send a command or message to the cli while in input mode, "
-                    "press enter to interact with the highlighted message while in page view mode, "
-                    "the default action is to copy it to input box unless it is overwritten.");
+                if (coreData.startedUpdate)
+                {
+                    AppendToPage(" ");
+                    AppendToPage("How to interact:");
+                    AppendToPage("Press tab to toggle between page view mode and input mode.");
+                    AppendToPage(
+                        "Page view mode allows you to navigate around the page view box "
+                        "which is the big vertically scrollable box above the bottom input box.");
+                    AppendToPage(
+                        "Input mode allows you to navigate around the input box "
+                        "which is the short horizontally scrollable box below the page view box.");
+                    AppendToPage(
+                        "Use the up and down keyboard keys to scroll the page view box history, "
+                        "use the same keys to scroll the input history.");
+                    AppendToPage(
+                        "Press enter to send a command or message to the cli while in input mode, "
+                        "press enter to interact with the highlighted message while in page view mode, "
+                        "the default action is to copy it to input box unless it is overwritten.");
+                }
             }
             else if (cmd == cmdClear)
             {
