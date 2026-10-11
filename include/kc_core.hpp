@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <filesystem>
 
 #include "core_utils.hpp"
 
@@ -18,6 +19,7 @@ namespace KalaCLI
 	using std::vector;
 	using std::pair;
 	using std::function;
+	using std::filesystem::path;
 	
 	//Prefix required in front of all commands
     static constexpr string_view COMMAND_PREFIX = "--";
@@ -30,6 +32,12 @@ namespace KalaCLI
     //How far back to store typed text history
 	//after enter was pressed and text was cleared from input box
     static constexpr u32 MAX_TYPED_TEXT_HISTORY = 100;
+
+	enum class PathTarget : u8
+	{
+		P_CURRENT = 0, //current directory in console
+		P_EXE = 1      //true exe path regardless of console directory
+	};
 
     enum class PageDirection : u8
     {
@@ -60,6 +68,8 @@ namespace KalaCLI
 	class LIB_API KalaCLICore
 	{
 	public:
+		static path GetPath(PathTarget pathTarget);
+
 		//Returns max character count in page row
 		static u32 GetRowSize();
 		//Returns row count in page visible area

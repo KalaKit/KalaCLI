@@ -18,6 +18,7 @@
 #include <csignal>
 #include <cstdio>
 #include <cerrno>
+#include <linux/limits.h>
 #endif
 
 #include "log_utils.hpp"
@@ -74,11 +75,15 @@ using std::lock_guard;
 using std::atomic;
 using std::function;
 using std::ostringstream;
+using std::filesystem::path;
+using std::filesystem::current_path;
 
 static constexpr u32 MAX_COMMAND_PARAM_LENGTH = 20;
 static constexpr u32 PAGE_TITLE_MAX_WIDTH = 50;
 static constexpr u32 WIDTH_MIN = 40;
 static constexpr u32 HEIGHT_MIN = 15;
+
+static path exePath{};
 
 struct CoreData
 {
@@ -456,6 +461,54 @@ namespace KalaCLI
 #endif
             }
         });
+
+	path KalaCLICore::GetPath(PathTarget pathTarget)
+	{
+        if (pathTarget == PathTarget::P_CURRENT) return current_path();
+        else
+        {
+            if (!exePath.empty()) return exePath;
+
+#if defined(KWIN_ANY)
+            wchar_t buffer[MAX_PATH]{};
+            DWORD length = GetModuleFileNameW(
+                nullptr,
+                buffer,
+                MAX_PATH);
+
+            if (length > 0
+                && length < MAX_PATH)
+            {	
+                exePath = path(buffer);
+            }
+            else
+            {
+                ForceClose(
+                    "KalaCLI core error",
+                    "Failed to get path to executable!");
+            }
+#else
+            char buffer[PATH_MAX]{};
+            ssize_t length = readlink(
+                "/proc/self/exe",
+                buffer,
+                sizeof(buffer) - 1);
+
+            if (length > 0)
+            {
+                buffer[length] = '\0';
+                exePath = path(buffer);
+            }
+            else
+            {
+                ForceClose(
+                    "KalaCLI core error",
+                    "Failed to get path to executable!");
+            }
+#endif
+            return exePath;
+        }
+	}
 
     u32 KalaCLICore::GetRowSize() { return coreData.innerW; }
     u32 KalaCLICore::GetRowCount() { return pageData.innerPageH; }
@@ -986,7 +1039,7 @@ namespace KalaCLI
                 {
                     AppendToPage(
                         "ERROR: Command '" + cmd + "' was not found! "
-                        "Type '/help' or '/h' to list all available commands.");
+                        "Type '/help' to list all available commands.");
                 }
             }
         }
@@ -1384,7 +1437,7 @@ namespace KalaCLI
                 {
                     coreData.inPageMode = !coreData.inPageMode;
 
-                    coreData.isInputDirty = true;
+                    coreData.isUserTextUpdateDirty = true;
 
                     return;
                 }
@@ -1415,14 +1468,14 @@ namespace KalaCLI
                     {
                         pageData.pageSelection--;
 
-                        coreData.isInputDirty = true;
+                        coreData.isUserTextUpdateDirty = true;
                     }
                     else if (key == ALLOWED_KEY::KEY_ARROW_DOWN
                         && (int)pageData.pageSelection < total - 1)
                     {
                         pageData.pageSelection++;
 
-                        coreData.isInputDirty = true;
+                        coreData.isUserTextUpdateDirty = true;
                     }
                     else if (key == ALLOWED_KEY::KEY_CARRIAGE_RETURN
                         || key == ALLOWED_KEY::KEY_LINE_FEED)
@@ -1451,7 +1504,7 @@ namespace KalaCLI
                                 highlightedtext);
                         }
 
-                        coreData.isInputDirty = true;
+                        coreData.isUserTextUpdateDirty = true;
                     }
 
                     return;
