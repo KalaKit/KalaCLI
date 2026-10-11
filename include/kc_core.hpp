@@ -33,12 +33,6 @@ namespace KalaCLI
 	//after enter was pressed and text was cleared from input box
     static constexpr u32 MAX_TYPED_TEXT_HISTORY = 100;
 
-	enum class PathTarget : u8
-	{
-		P_CURRENT = 0, //current directory in console
-		P_EXE = 1      //true exe path regardless of console directory
-	};
-
     enum class PageDirection : u8
     {
         D_UP = 0,  //nth row from bottom
@@ -68,7 +62,7 @@ namespace KalaCLI
 	class LIB_API KalaCLICore
 	{
 	public:
-		static path GetPath(PathTarget pathTarget);
+		static path GetExePath();
 
 		//Returns max character count in page row
 		static u32 GetRowSize();

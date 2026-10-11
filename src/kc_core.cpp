@@ -76,7 +76,6 @@ using std::atomic;
 using std::function;
 using std::ostringstream;
 using std::filesystem::path;
-using std::filesystem::current_path;
 
 static constexpr u32 MAX_COMMAND_PARAM_LENGTH = 20;
 static constexpr u32 PAGE_TITLE_MAX_WIDTH = 50;
@@ -462,52 +461,48 @@ namespace KalaCLI
             }
         });
 
-	path KalaCLICore::GetPath(PathTarget pathTarget)
+	path KalaCLICore::GetExePath()
 	{
-        if (pathTarget == PathTarget::P_CURRENT) return current_path();
-        else
-        {
-            if (!exePath.empty()) return exePath;
+        if (!exePath.empty()) return exePath;
 
 #if defined(KWIN_ANY)
-            wchar_t buffer[MAX_PATH]{};
-            DWORD length = GetModuleFileNameW(
-                nullptr,
-                buffer,
-                MAX_PATH);
+        wchar_t buffer[MAX_PATH]{};
+        DWORD length = GetModuleFileNameW(
+            nullptr,
+            buffer,
+            MAX_PATH);
 
-            if (length > 0
-                && length < MAX_PATH)
-            {	
-                exePath = path(buffer);
-            }
-            else
-            {
-                ForceClose(
-                    "KalaCLI core error",
-                    "Failed to get path to executable!");
-            }
-#else
-            char buffer[PATH_MAX]{};
-            ssize_t length = readlink(
-                "/proc/self/exe",
-                buffer,
-                sizeof(buffer) - 1);
-
-            if (length > 0)
-            {
-                buffer[length] = '\0';
-                exePath = path(buffer);
-            }
-            else
-            {
-                ForceClose(
-                    "KalaCLI core error",
-                    "Failed to get path to executable!");
-            }
-#endif
-            return exePath;
+        if (length > 0
+            && length < MAX_PATH)
+        {	
+            exePath = path(buffer);
         }
+        else
+        {
+            ForceClose(
+                "KalaCLI core error",
+                "Failed to get path to executable!");
+        }
+#else
+        char buffer[PATH_MAX]{};
+        ssize_t length = readlink(
+            "/proc/self/exe",
+            buffer,
+            sizeof(buffer) - 1);
+
+        if (length > 0)
+        {
+            buffer[length] = '\0';
+            exePath = path(buffer);
+        }
+        else
+        {
+            ForceClose(
+                "KalaCLI core error",
+                "Failed to get path to executable!");
+        }
+#endif
+        return exePath;
 	}
 
     u32 KalaCLICore::GetRowSize() { return coreData.innerW; }
