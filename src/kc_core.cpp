@@ -247,6 +247,19 @@ static void StartCapture()
 
                     KalaCLICore::AppendToPage(std::move(line));
                 }
+
+                if (!carry.empty()
+                    && pageData.canConsoleWriteToPage.load())
+                {
+                    string line = carry;
+                    if (!line.empty()
+                        && line.back() == '\r')
+                    {
+                        line.pop_back();
+                    }
+                    KalaCLICore::AppendToPage(std::move(line));
+                    carry.clear();
+                }
             }
         }).detach();
 #else
@@ -296,6 +309,19 @@ static void StartCapture()
 
                     KalaCLICore::AppendToPage(std::move(line));
                 }
+
+                if (!carry.empty()
+                    && pageData.canConsoleWriteToPage.load())
+                {
+                    string line = carry;
+                    if (!line.empty()
+                        && line.back() == '\r')
+                    {
+                        line.pop_back();
+                    }
+                    KalaCLICore::AppendToPage(std::move(line));
+                    carry.clear();
+                }
             }
         }).detach();
 #endif
@@ -308,10 +334,24 @@ static u32 GetPushedKey()
 
     int ch = (u32)_getch();
 
-    //esc sequence
+    //windows extended keys
+    if (ch == 0
+        || ch == 224)
+    {
+        int extended = _getch();
+
+        if (extended == 72) return scast<u32>(ALLOWED_KEY::KEY_ARROW_UP);
+        if (extended == 80) return scast<u32>(ALLOWED_KEY::KEY_ARROW_DOWN);
+        if (extended == 75) return scast<u32>(ALLOWED_KEY::KEY_ARROW_LEFT);
+        if (extended == 77) return scast<u32>(ALLOWED_KEY::KEY_ARROW_RIGHT);
+
+        return 0;
+    }
+
+    //ANSI escape sequences
     if (ch == 27)
     {
-        if (!_kbhit()) return 27; //real ESC
+        if (!_kbhit()) return 27;
         if (_getch() != '[') return 0;
         if (!_kbhit()) return 0;
 
@@ -324,7 +364,6 @@ static u32 GetPushedKey()
         return 0;
     }
 
-    if (ch > 127) return 0;
     //allow every printable + allowed key
     if ((ch >= 32
         && ch <= 126)
@@ -1682,7 +1721,7 @@ namespace KalaCLI
                 }
             };
 
-        if (u32 c = GetPushedKey()) handle_input_char(c);
+        while (u32 c = GetPushedKey()) handle_input_char(c);
 
         if (!coreData.hasReservedFrame)
         {
