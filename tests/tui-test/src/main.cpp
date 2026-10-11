@@ -6,17 +6,13 @@
 #include <chrono>
 #include <thread>
 
-#include "log_utils.hpp"
 #include "file_utils.hpp"
 
 #include "kc_core.hpp"
 
-using KalaHeaders::KalaLog::Log;
-
 using KalaHeaders::KalaFile::ReadLinesFromFile;
 
 using KalaCLI::KalaCLICore;
-using KalaCLI::PageDirection;
 using KalaCLI::COMMAND_PREFIX;
 
 using std::string;
@@ -24,13 +20,25 @@ using std::vector;
 using std::chrono::milliseconds;
 using std::this_thread::sleep_for;
 
-static void PrefixlessAction(string& message)
-{
-    KalaCLICore::AppendToPage("user message: " + message);
-}
-
 int main(int argc, char* argv[])
 {
+    //print user message
+    KalaCLICore::SetPrefixlessInputAction([](string& msg)
+        {
+            KalaCLICore::AppendToPage("user message: " + msg);
+        });
+
+    //test console wrapping states
+    KalaCLICore::AddCommand(
+        {
+            .primaryParam = "tw",
+            .description = "toggle wrapping",
+            .targetFunction = [](const vector<string>& _)
+                {
+                    KalaCLICore::SetWrapState(!KalaCLICore::GetWrapState());
+                }
+        });
+
     if (argc > 1)
     {
         string command{};
@@ -40,15 +48,11 @@ int main(int argc, char* argv[])
             command += argv[i];
         }
 
-        if (!command.empty())
-        {
-            KalaCLICore::SendCommand(command);
-        }
+        KalaCLICore::SendCommand(command);
 
         //always exits if a command was passed, otherwise goes into cli mode
         exit(0);
     }
-    else Log::Print("Type '" + string(COMMAND_PREFIX) + "help' to list all commands.", true);
 
     //test complex text file reading
     KalaCLICore::AddCommand(
@@ -83,51 +87,12 @@ int main(int argc, char* argv[])
                 }
         });
 
-    //test console wrapping states
-    KalaCLICore::AddCommand(
-        {
-            .primaryParam = "tw",
-            .description = "toggle wrapping",
-            .targetFunction = [](const vector<string>& _)
-                {
-                    KalaCLICore::SetWrapState(!KalaCLICore::GetWrapState());
-                }
-        });
-
-    //first time initialization prepares bounds for necessary checks...
-    KalaCLICore::UpdateDisplayedContent();
-
-    //add written prefixless message as user message
-    KalaCLICore::SetPrefixlessInputAction([](string& msg)
-        { 
-            PrefixlessAction(msg);
-        });
-
-    //draw an extra long title to test title bar horizontal auto-scrolling if console is thin
+    KalaCLICore::SetConsoleWritesToPageState(true);
+    KalaCLICore::SetWrapState(true);
     KalaCLICore::SetPageTitle("extra long title for no particular reason");
 
-    /*
-    //draw a permanent row at the top, never overwritten by other content
-    KalaCLICore::OverwriteRow(
-        "##### overwritten top row #####",
-        PageDirection::D_DOWN,
-        0);
-
-    //draw a permanent row at the bottom, never overwritten by other content
-    KalaCLICore::OverwriteRow(
-        "##### overwritten bottom row (second) #####",
-        PageDirection::D_UP,
-        1);
-
-    //draw a permanent row at the bottom, never overwritten by other content
-    KalaCLICore::OverwriteRow(
-        "##### overwritten bottom row (first) #####",
-        PageDirection::D_UP,
-        0);
-
-    //lock the top row and two bottom rows so they are not accounted as scrollable and highlightable areas
-    KalaCLICore::SetPageScrollRange({ 1, 2 });
-    */
+    KalaCLICore::AppendToPage(" ");
+    KalaCLICore::AppendToPage("Type '" + string(COMMAND_PREFIX) + "help' to list all commands.");
     
     while(true)
     {
