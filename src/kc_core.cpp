@@ -82,6 +82,7 @@ static constexpr u32 PAGE_TITLE_MAX_WIDTH = 50;
 static constexpr u32 WIDTH_MIN = 40;
 static constexpr u32 HEIGHT_MIN = 15;
 
+static bool isVerboseLoggingEnabled{};
 static path exePath{};
 
 struct CoreData
@@ -461,6 +462,9 @@ namespace KalaCLI
             }
         });
 
+    bool KalaCLICore::IsVerboseLoggingEnabled() { return isVerboseLoggingEnabled; }
+    void KalaCLICore::SetVerboseLoggingState(bool newValue) { isVerboseLoggingEnabled = newValue; }
+
 	path KalaCLICore::GetExePath()
 	{
         if (!exePath.empty()) return exePath;
@@ -530,7 +534,11 @@ namespace KalaCLI
     void KalaCLICore::SetWrapState(bool state)
     {
         pageData.isWrapped = state;
-        AppendToPage("Set wrapped mode to '" + string(pageData.isWrapped ? "true" : "false") + "'.");
+
+        if (isVerboseLoggingEnabled)
+        {
+            AppendToPage("Set wrapped mode to '" + string(pageData.isWrapped ? "true" : "false") + "'.");
+        }
 
         coreData.isUserTextUpdateDirty = true;
     }
@@ -547,10 +555,13 @@ namespace KalaCLI
 
         pageData.pageScrollRange = range;
 
-        AppendToPage(
-            "Set page scroll range to '" 
-            + to_string(pageData.pageScrollRange.first) + ", " 
-            + to_string(pageData.pageScrollRange.second) + "'.");
+        if (isVerboseLoggingEnabled)
+        {
+            AppendToPage(
+                "Set page scroll range to '" 
+                + to_string(pageData.pageScrollRange.first) + ", " 
+                + to_string(pageData.pageScrollRange.second) + "'.");
+        }
 
         coreData.isUserTextUpdateDirty = true;
     }
@@ -707,13 +718,15 @@ namespace KalaCLI
 
     void KalaCLICore::SetHighlightedRowEnterAction(function<void(u32, string&)> action)
     {
-        AppendToPage("Updated highlighted enter action.");
+        if (isVerboseLoggingEnabled) AppendToPage("Updated highlighted enter action.");
+        
         highlightedRowEnterAction = action;
     }
 
     void KalaCLICore::SetPrefixlessInputAction(function<void(string&)> action)
     {
-        AppendToPage("Updated prefixless input action.");
+        if (isVerboseLoggingEnabled) AppendToPage("Updated prefixless input action.");
+        
         prefixlessInputAction = action;
     }
 
@@ -875,7 +888,8 @@ namespace KalaCLI
                 }
                 else
                 {
-                    AppendToPage("Enabled console messages.");
+                    if (isVerboseLoggingEnabled) AppendToPage("Enabled console messages.");
+
                     pageData.canConsoleWriteToPage = true;
                 }
             }
@@ -888,7 +902,8 @@ namespace KalaCLI
                 }
                 else
                 {
-                    AppendToPage("Disabled console messages.");
+                    if (isVerboseLoggingEnabled) AppendToPage("Disabled console messages.");
+                    
                     pageData.canConsoleWriteToPage = false;
                 }
             }
@@ -901,7 +916,9 @@ namespace KalaCLI
                 }
                 else
                 {
-                    AppendToPage("Updated page title.");
+
+                    if (isVerboseLoggingEnabled) AppendToPage("Updated page title.");
+        
                     SetPageTitle(cmdContent);
                 }
             }
@@ -969,7 +986,10 @@ namespace KalaCLI
                         {
                             AppendToPage("ERROR: Failed to copy page content to clipboard! Reason: " + err);
                         }
-                        else AppendToPage("Copied page content to clipboard.");
+                        else
+                        {
+                            if (isVerboseLoggingEnabled) AppendToPage("Copied page content to clipboard.");
+                        }
 #else
                         auto copy_to_clipboard = [&combined](bool wl_copy) -> bool
                             {
@@ -993,7 +1013,7 @@ namespace KalaCLI
                         if (copy_to_clipboard(true)
                             || copy_to_clipboard(false))
                         {
-                            AppendToPage("Copied page content to clipboard.");
+                            if (isVerboseLoggingEnabled) AppendToPage("Copied page content to clipboard.");
                         }
                         else AppendToPage(
                             "ERROR: Failed to copy page content to clipboard because "
@@ -1109,7 +1129,11 @@ namespace KalaCLI
             return;
         }
 
-        AppendToPage("Added new command '" + string(command.primaryParam) + "'!");
+        if (isVerboseLoggingEnabled)
+        {
+            AppendToPage("Added new command '" + string(command.primaryParam) + "'!");
+        }
+        
         addedCommands.push_back(std::move(command));
     }
 

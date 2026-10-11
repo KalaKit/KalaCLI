@@ -62,6 +62,9 @@ namespace KalaCLI
 	class LIB_API KalaCLICore
 	{
 	public:
+		static bool IsVerboseLoggingEnabled();
+		static void SetVerboseLoggingState(bool newValue);
+
 		static path GetExePath();
 
 		//Returns max character count in page row
