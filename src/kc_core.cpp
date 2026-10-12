@@ -169,7 +169,7 @@ static CoreData coreData{};
 static PageViewBoxData pageData{};
 static InputBoxData inputData{};
 
-static const string cmdHelp =           string(COMMAND_PREFIX) + "h";
+static const string cmdHelp =           string(COMMAND_PREFIX) + "help";
 static const string cmdClear =          string(COMMAND_PREFIX) + "c";
 static const string cmdCommand =        string(COMMAND_PREFIX) + "cmd";
 static const string cmdEnableConsole =  string(COMMAND_PREFIX) + "ec";
@@ -784,7 +784,7 @@ namespace KalaCLI
         {
             if (split.size() > 1)
             {
-                AppendToPage("ERROR: Command 'h' does not accept any arguments!");
+                AppendToPage("ERROR: Command 'help' does not accept any arguments!");
                 return;
             }
 
@@ -796,7 +796,7 @@ namespace KalaCLI
             if (!coreData.startedUpdate)
             {
                 AppendToPage(
-                    "Run the 'h' command again when not in headless mode "
+                    "Run the 'help' command again when not in headless mode "
                     "to display additional non-headless commands and interaction info.");
             }
 
@@ -1139,7 +1139,7 @@ namespace KalaCLI
 
                     return 
                         "Command '" + cmd + "' was not found! "
-                        "Type '" + string(COMMAND_PREFIX) + "h' to list all available commands.";
+                        "Type '" + string(COMMAND_PREFIX) + "help' to list all available commands.";
                 };
 
             string err = call_user_added_command();
