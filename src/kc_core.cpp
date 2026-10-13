@@ -1362,58 +1362,60 @@ namespace KalaCLI
                 return true;
             };
 
-        auto clear_screen = []() -> bool
+        auto clear_screen = []() -> string
             {
 #if defined(KWIN_ANY)
                 HANDLE handle = (HANDLE)_get_osfhandle(coreData.real_out);
 
                 CONSOLE_SCREEN_BUFFER_INFO csbi{};
-                if (!GetConsoleScreenBufferInfo(handle, &csbi)) return false;
-
-                SMALL_RECT scrollRect
+                if (!GetConsoleScreenBufferInfo(handle, &csbi))
                 {
-                    0,
-                    0,
-                    scast<SHORT>(csbi.dwSize.X - 1),
-                    scast<SHORT>(csbi.dwSize.Y - 1)
-                };
+                    return "GetConsoleScreenBufferInfo failed! Reason: " + to_string(GetLastError());
+                }
 
-                COORD scrollTarget
-                {
-                    0,
-                    scast<SHORT>(-csbi.dwSize.Y)
-                };
+                DWORD cells = 
+                    scast<DWORD>(csbi.dwSize.X)
+                    * scast<DWORD>(csbi.dwSize.Y);
 
-                CHAR_INFO fill{};
-                fill.Char.UnicodeChar = L' ';
-                fill.Attributes = csbi.wAttributes;
+                DWORD written{};
+                COORD origin{ 0, 0 };
 
-                if (!ScrollConsoleScreenBufferW(
+                if (!FillConsoleOutputCharacterW(
                     handle,
-                    &scrollRect,
-                    nullptr,
-                    scrollTarget,
-                    &fill))
+                    L' ',
+                    cells,
+                    origin,
+                    &written))
                 {
-                    return false;
+                    return "FillConsoleOutputCharacterW failed! Reason: " + to_string(GetLastError());
+                }
+
+                if (!FillConsoleOutputAttribute(
+                    handle,
+                    csbi.wAttributes,
+                    cells,
+                    origin,
+                    &written))
+                {
+                    return "FillConsoleOutputAttribute failed! Reason: " + to_string(GetLastError());
                 }
 
                 if (!SetConsoleCursorPosition(
                     handle,
                     { 0, 0 }))
                 {
-                    return false;
+                    return "SetConsoleCursorPosition failed! Reason: " + to_string(GetLastError());
                 }
 #else
                 fflush(stdout);
 
                 int capturedOut = dup(STDOUT_FILENO);
-                if (capturedOut == -1) return false;
+                if (capturedOut == -1) return "Captured out returned -1";
 
                 if (dup2(coreData.real_out, STDOUT_FILENO) == -1)
                 {
                     close(capturedOut);
-                    return false;
+                    return "dup2 failed to use 'coreData.real_out'!";
                 }
 
                 int result = system("clear");
@@ -1424,10 +1426,10 @@ namespace KalaCLI
                 if (!restored
                     || result != 0)
                 {
-                    return false;
+                    return "dup2 failed to restore 'capturedOut'!";
                 }
 #endif
-                return true;
+                return "";
             };
 
         if (totalSize.x < WIDTH_MIN
@@ -1441,11 +1443,12 @@ namespace KalaCLI
                         ? "width"
                         : "height";
 
-            if (!clear_screen())
+            string err = clear_screen();
+            if (!err.empty())
             {
                 ForceClose(
                     "KalaCLI core error",
-                    "Failed to clear console screen!");
+                    "Failed to clear console screen! Reason: " + err);
             }
 
             //disable wrapping and write error message
@@ -1873,11 +1876,12 @@ namespace KalaCLI
                     return pageH + 1;
                 }
 
-                if (!clear_screen())
+                string err = clear_screen();
+                if (!err.empty())
                 {
                     ForceClose(
                         "KalaCLI core error",
-                        "Failed to clear console screen!");
+                        "Failed to clear console screen! Reason: " + err);
                 }
 
                 draw_top_border(horizontalBar, w);
