@@ -801,25 +801,17 @@ namespace KalaCLI
             }
 
             AppendToPage("Available commands:");
-            AppendToPage(
-                string(COMMAND_PREFIX) + "h: lists all available commands and what they do");
+            AppendToPage(cmdHelp + ": lists all available commands and what they do");
 
             if (coreData.startedUpdate)
             {
-                AppendToPage(
-                    string(COMMAND_PREFIX) + "c: clears all CLI page messages");
-                AppendToPage(
-                    string(COMMAND_PREFIX) + "cmd command: sends selected message as command to console");
-                AppendToPage(
-                    string(COMMAND_PREFIX) + "ec: enables console-based updates");
-                AppendToPage(
-                    string(COMMAND_PREFIX) + "dc: disables console-based updates");
-                AppendToPage(
-                    string(COMMAND_PREFIX) + "spt title: updates page title");
-                AppendToPage(
-                    string(COMMAND_PREFIX) + "cp: copies page content to clipboard");
-                AppendToPage(
-                    string(COMMAND_PREFIX) + "e: exit the CLI");
+                AppendToPage(cmdClear + ": clears all CLI page messages");
+                AppendToPage(cmdCommand + " command: sends selected message as command to console");
+                AppendToPage(cmdEnableConsole + ": enables console-based updates");
+                AppendToPage(cmdDisableConsole + ": disables console-based updates");
+                AppendToPage(cmdSetPageTitle + " title: updates page title");
+                AppendToPage(cmdCopyPage + ": copies page content to clipboard");
+                AppendToPage(cmdExit + ": exit the CLI");
             }
 
             for (const Command& thisCmd : addedCommands)
