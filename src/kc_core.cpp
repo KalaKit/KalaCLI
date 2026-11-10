@@ -1141,7 +1141,19 @@ namespace KalaCLI
 
     void KalaCLICore::AddCommand(Command&& command)
     {
-        if (!IsStringInRange(command.primaryParam, 1, MAX_COMMAND_PARAM_LENGTH))
+        bool outResult{};
+        string err = IsStringInRange(
+            command.primaryParam, 
+            1, 
+            MAX_COMMAND_PARAM_LENGTH,
+            outResult);
+
+        if (!err.empty())
+        {
+            AppendToPage("ERROR: Failed to add command '" + string(command.primaryParam) + "'! Reason: " + err);
+            return;
+        }
+        if (!outResult)
         {
             AppendToPage(
 				"ERROR: Failed to add command '" + string(command.primaryParam) 
