@@ -542,11 +542,11 @@ namespace KalaCLI
         switch (textRange)
         {
         default:
-        case TextRange::R_ALL:
+        case TextRange::ALL:
             return pageData.pageSelection;
-        case TextRange::R_VISIBLE:
+        case TextRange::VISIBLE:
             return pageData.pageSelection - pageData.pageTop;
-        case TextRange::R_HIGHLIGHTED_ROW:
+        case TextRange::HIGHLIGHTED_ROW:
             return 0;
         }
     }
@@ -608,7 +608,7 @@ namespace KalaCLI
         switch (textRange)
         {
         default:
-        case TextRange::R_ALL:
+        case TextRange::ALL:
         {
             lock_guard<mutex> lock(coreData.externalMutex);
 
@@ -623,7 +623,7 @@ namespace KalaCLI
 
             return content;
         }
-        case TextRange::R_VISIBLE:
+        case TextRange::VISIBLE:
         {
             vector<string> content{};
             content.reserve(pageData.renderedPageContent.size());
@@ -634,12 +634,12 @@ namespace KalaCLI
 
             return content;
         }
-        case TextRange::R_HIGHLIGHTED_ROW:
+        case TextRange::HIGHLIGHTED_ROW:
         {
             return
             {
                 pageData.renderedPageContent[
-                    GetHighlightedRow(TextRange::R_VISIBLE)].first
+                    GetHighlightedRow(TextRange::VISIBLE)].first
             };
         }
         }
@@ -1571,7 +1571,7 @@ namespace KalaCLI
                     else if (key == ALLOWED_KEY::KEY_CARRIAGE_RETURN
                         || key == ALLOWED_KEY::KEY_LINE_FEED)
                     {
-                        u32 highlightedRow = GetHighlightedRow(TextRange::R_VISIBLE);
+                        u32 highlightedRow = GetHighlightedRow(TextRange::VISIBLE);
                         string highlightedtext{};
                         {
                             lock_guard<mutex> lock(coreData.externalMutex);
@@ -2083,7 +2083,7 @@ namespace KalaCLI
                                     //ignore rows outside the current visible area
                                     if (row.row >= pageData.innerPageH) continue;
 
-                                    u32 targetRow = row.direction == PageDirection::D_UP
+                                    u32 targetRow = row.direction == PageDirection::UP
                                         ? pageData.innerPageH - 1 - row.row
                                         : row.row;
 
