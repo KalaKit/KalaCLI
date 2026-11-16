@@ -2257,7 +2257,7 @@ namespace KalaCLI
 		Log::Print(
 			reason,
 			target,
-			LogType::ERROR,
+			LogType::LOG_ERROR,
 			2,
 			true,
 			TimeFormat::TIME_NONE,
